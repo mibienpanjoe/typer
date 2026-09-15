@@ -22,6 +22,7 @@ type Target struct {
 	PID      int     `json:"pid"`
 	WindowID string  `json:"window_id"`
 	KittyID  *string `json:"kitty_id"`
+	ListenOn *string `json:"listen_on,omitempty"`
 	TTY      *string `json:"tty"`
 	Title    string  `json:"title"`
 	CWD      *string `json:"cwd"`

@@ -8,21 +8,28 @@ import (
 	"github.com/mibienpanjoe/typer/internal/domain"
 )
 
-var ErrLocked = errors.New("session verrouillée : GNOME Terminal ne peut pas recevoir de frappe")
+var ErrLocked = errors.New("session verrouillée : impossible d'injecter au clavier")
 
 func SendKitty(run discover.Runner, target domain.Target, message string) error {
 	if run == nil {
 		run = discover.DefaultRunner
 	}
-	if target.KittyID == nil || *target.KittyID == "" {
-		return fmt.Errorf("cible Kitty sans id de fenêtre")
+	if target.KittyID != nil && *target.KittyID != "" {
+		match := "id:" + *target.KittyID
+		args := []string{"@"}
+		if target.ListenOn != nil && *target.ListenOn != "" {
+			args = append(args, "--to", *target.ListenOn)
+		}
+		args = append(args, "send-text", "--match", match, "--", message+"\n")
+		if _, err := run("kitty", args...); err != nil {
+			return fmt.Errorf("kitty send-text (id %s): %w", *target.KittyID, err)
+		}
+		return nil
 	}
-	match := "id:" + *target.KittyID
-	_, err := run("kitty", "@", "send-text", "--match", match, "--", message+"\n")
-	if err != nil {
-		return fmt.Errorf("kitty send-text (id %s): %w", *target.KittyID, err)
+	if target.WindowID != "" {
+		return typeIntoWindow(run, target.WindowID, message)
 	}
-	return nil
+	return fmt.Errorf("cible Kitty sans id de fenêtre")
 }
 
 func SendGnome(run discover.Runner, locked bool, target domain.Target, message string) error {
@@ -35,10 +42,14 @@ func SendGnome(run discover.Runner, locked bool, target domain.Target, message s
 	if target.WindowID == "" {
 		return fmt.Errorf("cible GNOME sans window id")
 	}
-	if _, err := run("xdotool", "type", "--clearmodifiers", "--window", target.WindowID, "--", message); err != nil {
-		return fmt.Errorf("xdotool type: %w — installez xdotool (X11, écran déverrouillé)", err)
+	return typeIntoWindow(run, target.WindowID, message)
+}
+
+func typeIntoWindow(run discover.Runner, windowID, message string) error {
+	if _, err := run("xdotool", "type", "--clearmodifiers", "--window", windowID, "--", message); err != nil {
+		return fmt.Errorf("xdotool type: %w — installez xdotool (écran déverrouillé)", err)
 	}
-	if _, err := run("xdotool", "key", "--window", target.WindowID, "Return"); err != nil {
+	if _, err := run("xdotool", "key", "--window", windowID, "Return"); err != nil {
 		return fmt.Errorf("xdotool key Return: %w", err)
 	}
 	return nil

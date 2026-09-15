@@ -69,3 +69,37 @@ func TestListKittyRemoteControlError(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestListKittyFallsBackToXdotool(t *testing.T) {
+	run := func(name string, args ...string) ([]byte, error) {
+		if name == "kitty" {
+			return nil, errors.New("open /dev/tty: no such device")
+		}
+		if name == "xdotool" && len(args) >= 2 && args[0] == "search" {
+			return []byte("48234510\n46137358\n"), nil
+		}
+		if name == "xdotool" && len(args) >= 2 && args[0] == "getwindowname" && args[1] == "46137358" {
+			return []byte("hi | afrikopps\n"), nil
+		}
+		if name == "xdotool" && len(args) >= 2 && args[0] == "getwindowname" {
+			return []byte("other\n"), nil
+		}
+		if name == "xdotool" && len(args) >= 2 && args[0] == "getwindowpid" {
+			return []byte("4242\n"), nil
+		}
+		return nil, errors.New("unexpected " + name)
+	}
+	got, err := ListKitty(run)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("len %d %+v", len(got), got)
+	}
+	if got[1].WindowID != "46137358" || got[1].Title != "hi | afrikopps" {
+		t.Fatalf("%+v", got[1])
+	}
+	if got[1].KittyID != nil {
+		t.Fatal("x11 fallback must not invent a kitty id")
+	}
+}

@@ -49,6 +49,9 @@ func Revalidate(snap domain.Target, live []domain.Target, alive, gnomeLocked boo
 	if snap.Emulator == domain.EmulatorGnome && gnomeLocked {
 		return backend.ErrLocked
 	}
+	if snap.Emulator == domain.EmulatorKitty && snap.KittyID == nil && gnomeLocked {
+		return backend.ErrLocked
+	}
 	return nil
 }
 

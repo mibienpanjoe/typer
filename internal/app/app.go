@@ -69,9 +69,14 @@ func Schedule(d Deps, atFlag, message string, yes bool) int {
 
 	targets, kittyErr := discover.All(d.run())
 	if len(targets) == 0 {
-		fmt.Fprintln(d.Stderr, "aucune fenêtre Kitty ou GNOME Terminal. Ouvrez l'agent dans Kitty ou GNOME Terminal.")
+		fmt.Fprintln(d.Stderr, "aucune fenêtre Kitty ou GNOME Terminal.")
+		fmt.Fprintln(d.Stderr, "Typer tourne dans un autre terminal : kitty @ ls ne voit Kitty que via un socket.")
 		if kittyErr != nil {
-			fmt.Fprintf(d.Stderr, "Kitty: %v\nActivez allow_remote_control (socket-only) dans kitty.conf.\n", kittyErr)
+			fmt.Fprintf(d.Stderr, "Kitty: %v\n", kittyErr)
+			fmt.Fprintln(d.Stderr, "Pour le remote control, dans kitty.conf puis redémarrer Kitty :")
+			fmt.Fprintln(d.Stderr, "  allow_remote_control socket-only")
+			fmt.Fprintln(d.Stderr, "  listen_on unix:${XDG_RUNTIME_DIR}/kitty")
+			fmt.Fprintln(d.Stderr, "Sinon installez xdotool (déjà utilisé en secours si des fenêtres Kitty sont visibles).")
 		}
 		return ExitUser
 	}
@@ -172,8 +177,8 @@ func Schedule(d Deps, atFlag, message string, yes bool) int {
 	}
 
 	warn := ""
-	if backendName == domain.BackendGnome {
-		warn = "⚠ GNOME : échouera si l'écran est verrouillé à cette heure."
+	if backendName == domain.BackendGnome || job.Target.KittyID == nil {
+		warn = "⚠ Écran verrouillé à l'heure H : l'envoi clavier échouera."
 	}
 	if d.Receipt != nil {
 		fmt.Fprint(d.Stdout, d.Receipt(job, warn))

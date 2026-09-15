@@ -30,6 +30,39 @@ func TestSendKittyMatchesOnlySnapshotID(t *testing.T) {
 	}
 }
 
+func TestSendKittyUsesListenOn(t *testing.T) {
+	kid := "3"
+	to := "unix:/run/user/1000/kitty"
+	var calls []string
+	run := func(name string, args ...string) ([]byte, error) {
+		calls = append(calls, strings.Join(args, " "))
+		return nil, nil
+	}
+	err := SendKitty(run, domain.Target{KittyID: &kid, ListenOn: &to}, "continue")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(calls[0], "--to unix:/run/user/1000/kitty") {
+		t.Fatalf("%s", calls[0])
+	}
+}
+
+func TestSendKittyWithoutRemoteUsesXdotool(t *testing.T) {
+	var calls []string
+	run := func(name string, args ...string) ([]byte, error) {
+		calls = append(calls, name+" "+strings.Join(args, " "))
+		return nil, nil
+	}
+	err := SendKitty(run, domain.Target{WindowID: "46137358"}, "continue")
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(calls, "\n")
+	if !strings.Contains(joined, "xdotool type") || !strings.Contains(joined, "--window 46137358") {
+		t.Fatalf("%s", joined)
+	}
+}
+
 func TestSendKittyRequiresID(t *testing.T) {
 	err := SendKitty(func(string, ...string) ([]byte, error) {
 		t.Fatal("should not run")
