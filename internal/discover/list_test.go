@@ -68,6 +68,10 @@ func TestLabelTrimsKittyColonPrefix(t *testing.T) {
 	if got != "Kitty · hi | afrikopps" {
 		t.Fatalf("got %q", got)
 	}
+	got = Label(domain.Target{Emulator: domain.EmulatorKitty, Title: "： hi | afrikopps"})
+	if got != "Kitty · hi | afrikopps" {
+		t.Fatalf("fullwidth: %q", got)
+	}
 }
 
 func TestPickForYesSinglePlausible(t *testing.T) {

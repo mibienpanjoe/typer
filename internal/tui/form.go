@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	huh "charm.land/huh/v2"
@@ -21,26 +20,6 @@ type formState struct {
 	Message string
 }
 
-func Recap(targets map[string]domain.Target, st *formState) string {
-	t, found := targets[st.Choice]
-	if !found {
-		return "Choisissez une fenêtre, une heure HH:MM, et le texte."
-	}
-	when := strings.TrimSpace(st.At)
-	if when == "" {
-		when = "??:??"
-	}
-	msg := strings.TrimSpace(st.Message)
-	if msg == "" {
-		msg = domain.DefaultMessage
-	}
-	warn := ""
-	if t.Emulator == domain.EmulatorGnome || t.KittyID == nil {
-		warn = "\n⚠ Écran verrouillé à l'heure H : l'envoi clavier échouera."
-	}
-	return fmt.Sprintf("À %s, envoyer « %s » + Entrée\n→ %s%s", when, msg, discover.Label(t), warn)
-}
-
 func RunForm(targets []domain.Target, at, message string) (app.FormResult, error) {
 	byID := map[string]domain.Target{}
 	opts := make([]huh.Option[string], 0, len(targets))
@@ -54,6 +33,9 @@ func RunForm(targets []domain.Target, at, message string) (app.FormResult, error
 	if st.Message == "" {
 		st.Message = domain.DefaultMessage
 	}
+	if len(targets) > 0 {
+		st.Choice = "0"
+	}
 	if p, err := discover.PickForYes(targets); err == nil {
 		for i, t := range targets {
 			if t.Identity() == p.Identity() {
@@ -63,8 +45,10 @@ func RunForm(targets []domain.Target, at, message string) (app.FormResult, error
 		}
 	}
 
-	ok := false
-	recap := func() string { return Recap(byID, st) }
+	keys := huh.NewDefaultKeyMap()
+	keys.Quit.SetKeys("ctrl+c", "esc")
+	keys.Quit.SetHelp("esc", "annuler")
+	keys.Input.Submit.SetHelp("entrée", "programmer")
 
 	form := huh.NewForm(
 		huh.NewGroup(
@@ -83,18 +67,11 @@ func RunForm(targets []domain.Target, at, message string) (app.FormResult, error
 				}),
 			huh.NewInput().
 				Title("Message").
+				Description("Entrée enregistre le job · Esc annule").
 				Value(&st.Message),
-			huh.NewNote().
-				Title("Résumé").
-				DescriptionFunc(recap, st),
-			huh.NewConfirm().
-				Title("Programmer ce job ?").
-				DescriptionFunc(recap, st).
-				Affirmative("Programmer").
-				Negative("Annuler").
-				Value(&ok),
 		),
-	)
+	).WithKeyMap(keys)
+
 	if os.Getenv("ACCESSIBLE") != "" {
 		form = form.WithAccessible(true)
 	}
@@ -108,15 +85,10 @@ func RunForm(targets []domain.Target, at, message string) (app.FormResult, error
 	if !exists {
 		return app.FormResult{Confirm: false}, fmt.Errorf("cible invalide")
 	}
-	return app.FormResult{Target: t, At: st.At, Message: st.Message, Confirm: ok}, nil
+	return app.FormResult{Target: t, At: st.At, Message: st.Message, Confirm: true}, nil
 }
 
 func Card(job domain.Job, warn string) string {
-	box := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		Padding(0, 1).
-		MarginTop(1).
-		MarginBottom(1)
 	inner := fmt.Sprintf(
 		"Typer · job enregistré\nÀ %s  envoyer « %s » + Entrée\n→ %s\nid %s\nAnnuler : typer cancel %s",
 		job.At.Format("15:04"),
@@ -128,5 +100,13 @@ func Card(job domain.Job, warn string) string {
 	if warn != "" {
 		inner += "\n" + warn
 	}
-	return box.Render(inner) + "\n"
+	return box().Render(inner) + "\n"
+}
+
+func box() lipgloss.Style {
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		Padding(0, 1).
+		MarginTop(1).
+		MarginBottom(1)
 }

@@ -80,8 +80,9 @@ func deps(stdout, stderr io.Writer) app.Deps {
 	if p := os.Getenv("TYPER_STATE"); p != "" {
 		root = p
 	}
+	s := store.New(root)
 	return app.Deps{
-		Store:  store.New(root),
+		Store:  s,
 		Runner: discover.DefaultRunner,
 		Stdout: stdout,
 		Stderr: stderr,

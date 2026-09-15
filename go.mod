@@ -5,6 +5,7 @@ go 1.25.8
 require (
 	charm.land/huh/v2 v2.0.3
 	charm.land/lipgloss/v2 v2.0.1
+	github.com/jedib0t/go-pretty/v6 v6.6.8
 	github.com/mattn/go-isatty v0.0.20
 )
 
@@ -32,4 +33,5 @@ require (
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
+	golang.org/x/text v0.22.0 // indirect
 )

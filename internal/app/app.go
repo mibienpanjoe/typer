@@ -17,9 +17,9 @@ import (
 )
 
 const (
-	ExitOK          = 0
-	ExitUser        = 1
-	ExitFire        = 2
+	ExitOK   = 0
+	ExitUser = 1
+	ExitFire = 2
 )
 
 type FormResult struct {
@@ -30,17 +30,17 @@ type FormResult struct {
 }
 
 type Deps struct {
-	Store     *store.Store
-	Now       func() time.Time
-	Runner    discover.Runner
-	Stdout    io.Writer
-	Stderr    io.Writer
-	IsTTY     func() bool
-	Form      func(targets []domain.Target, at, message string) (FormResult, error)
-	Receipt   func(job domain.Job, warn string) string
-	Exe       string
-	Alive     func(int) bool
-	Locked    func() bool
+	Store   *store.Store
+	Now     func() time.Time
+	Runner  discover.Runner
+	Stdout  io.Writer
+	Stderr  io.Writer
+	IsTTY   func() bool
+	Form    func(targets []domain.Target, at, message string) (FormResult, error)
+	Receipt func(job domain.Job, warn string) string
+	Exe     string
+	Alive   func(int) bool
+	Locked  func() bool
 }
 
 func (d Deps) now() time.Time {
@@ -140,7 +140,7 @@ func Schedule(d Deps, atFlag, message string, yes bool) int {
 	if target.Emulator == domain.EmulatorGnome {
 		backendName = domain.BackendGnome
 	}
-	if target.Emulator == domain.EmulatorKitty && kittyErr != nil {
+	if target.Emulator == domain.EmulatorKitty && kittyErr != nil && target.KittyID == nil && target.WindowID == "" {
 		fmt.Fprintf(d.Stderr, "Kitty remote control indisponible. Activez allow_remote_control (socket-only) dans kitty.conf.\n")
 		return ExitUser
 	}

@@ -24,8 +24,14 @@ func Label(t domain.Target) string {
 
 func cleanTitle(title string) string {
 	title = strings.TrimSpace(title)
-	title = strings.TrimPrefix(title, ":")
-	return strings.TrimSpace(title)
+	for {
+		next := strings.TrimLeft(title, ":：∶")
+		next = strings.TrimSpace(next)
+		if next == title {
+			return title
+		}
+		title = next
+	}
 }
 
 func IsPlausible(t domain.Target) bool {
