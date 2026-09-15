@@ -62,15 +62,16 @@ func run(args []string, stdout, stderr io.Writer) int {
 			id = rest[0]
 		}
 		return app.Fire(d, id)
-	case "":
-		at, msg, yes, err := parseScheduleFlags(args, stderr)
+	default:
+		at, msg, yes, extra, err := parseScheduleFlags(args, stderr)
 		if err != nil {
 			return app.ExitUser
 		}
+		if len(extra) > 0 {
+			fmt.Fprintf(stderr, "typer: commande inconnue %q\n", extra[0])
+			return app.ExitUser
+		}
 		return app.Schedule(d, at, msg, yes)
-	default:
-		fmt.Fprintf(stderr, "typer: commande inconnue %q\n", cmd)
-		return app.ExitUser
 	}
 }
 
@@ -95,7 +96,7 @@ func deps(stdout, stderr io.Writer) app.Deps {
 	}
 }
 
-func parseScheduleFlags(args []string, stderr io.Writer) (at, msg string, yes bool, err error) {
+func parseScheduleFlags(args []string, stderr io.Writer) (at, msg string, yes bool, extra []string, err error) {
 	fs := flag.NewFlagSet("typer", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	atp := fs.String("at", "", "heure HH:MM")
@@ -103,9 +104,9 @@ func parseScheduleFlags(args []string, stderr io.Writer) (at, msg string, yes bo
 	fs.StringVar(msgp, "m", domain.DefaultMessage, "texte")
 	yesp := fs.Bool("yes", false, "sans confirmation")
 	if err := fs.Parse(args); err != nil {
-		return "", "", false, err
+		return "", "", false, nil, err
 	}
-	return *atp, *msgp, *yesp, nil
+	return *atp, *msgp, *yesp, fs.Args(), nil
 }
 
 func wantsHelp(args []string) bool {
@@ -122,7 +123,12 @@ func splitCommand(args []string) (cmd string, rest []string) {
 		if strings.HasPrefix(a, "-") {
 			continue
 		}
-		return a, args[i+1:]
+		switch a {
+		case "list", "cancel", "fire":
+			return a, args[i+1:]
+		default:
+			return "", nil
+		}
 	}
 	return "", nil
 }

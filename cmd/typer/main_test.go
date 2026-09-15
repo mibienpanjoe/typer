@@ -34,4 +34,15 @@ func TestUnknownCommand(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("exit %d", code)
 	}
+	if !strings.Contains(stderr.String(), `commande inconnue "wat"`) {
+		t.Fatalf("stderr=%s", stderr.String())
+	}
+}
+
+func TestAtFlagValueIsNotACommand(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	_ = run([]string{"--at", "06:34", "-m", "continue", "--yes"}, &stdout, &stderr)
+	if strings.Contains(stderr.String(), "commande inconnue") {
+		t.Fatalf("06:34 was parsed as a command: %s", stderr.String())
+	}
 }
