@@ -19,3 +19,19 @@ func TestHelpMentionsCommandsAndFlags(t *testing.T) {
 		}
 	}
 }
+
+func TestFireRequiresID(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"fire"}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("exit %d stderr=%s", code, stderr.String())
+	}
+}
+
+func TestUnknownCommand(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"wat"}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("exit %d", code)
+	}
+}

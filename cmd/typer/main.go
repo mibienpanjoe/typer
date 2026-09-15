@@ -1,10 +1,19 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"io"
 	"os"
 	"strings"
+
+	"github.com/mattn/go-isatty"
+
+	"github.com/mibienpanjoe/typer/internal/app"
+	"github.com/mibienpanjoe/typer/internal/discover"
+	"github.com/mibienpanjoe/typer/internal/domain"
+	"github.com/mibienpanjoe/typer/internal/store"
+	"github.com/mibienpanjoe/typer/internal/tui"
 )
 
 const usage = `Usage: typer [flags]
@@ -36,22 +45,67 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	cmd, _ := splitCommand(args)
+	d := deps(stdout, stderr)
+	cmd, rest := splitCommand(args)
 	switch cmd {
-	case "list", "cancel", "fire":
-		fmt.Fprintf(stderr, "typer %s: pas encore implémenté\n", cmd)
-		return 1
-	case "":
-		if len(args) == 0 {
-			fmt.Fprint(stdout, usage)
-			return 0
+	case "list":
+		return app.List(d)
+	case "cancel":
+		id := ""
+		if len(rest) > 0 {
+			id = rest[0]
 		}
-		fmt.Fprintln(stderr, "typer: programmation pas encore implémentée")
-		return 1
+		return app.Cancel(d, id)
+	case "fire":
+		id := ""
+		if len(rest) > 0 {
+			id = rest[0]
+		}
+		return app.Fire(d, id)
+	case "":
+		at, msg, yes, err := parseScheduleFlags(args, stderr)
+		if err != nil {
+			return app.ExitUser
+		}
+		return app.Schedule(d, at, msg, yes)
 	default:
 		fmt.Fprintf(stderr, "typer: commande inconnue %q\n", cmd)
-		return 1
+		return app.ExitUser
 	}
+}
+
+func deps(stdout, stderr io.Writer) app.Deps {
+	root := store.DefaultRoot()
+	if p := os.Getenv("TYPER_STATE"); p != "" {
+		root = p
+	}
+	return app.Deps{
+		Store:  store.New(root),
+		Runner: discover.DefaultRunner,
+		Stdout: stdout,
+		Stderr: stderr,
+		IsTTY: func() bool {
+			return isatty.IsTerminal(os.Stdin.Fd()) && isatty.IsTerminal(os.Stdout.Fd())
+		},
+		Form:    tui.RunForm,
+		Receipt: tui.Card,
+		Exe:     app.MustExe(),
+		Alive:   app.DefaultAlive,
+		Locked:  func() bool { return app.SessionLocked(nil) },
+	}
+}
+
+func parseScheduleFlags(args []string, stderr io.Writer) (at, msg string, yes bool, err error) {
+	fs := flag.NewFlagSet("typer", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	atp := fs.String("at", "", "heure HH:MM")
+	msgp := fs.String("message", domain.DefaultMessage, "texte")
+	fs.StringVar(msgp, "m", domain.DefaultMessage, "texte")
+	yesp := fs.Bool("yes", false, "sans confirmation")
+	if err := fs.Parse(args); err != nil {
+		return "", "", false, err
+	}
+	return *atp, *msgp, *yesp, nil
 }
 
 func wantsHelp(args []string) bool {

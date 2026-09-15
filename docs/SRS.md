@@ -374,13 +374,13 @@ Un build v1 est conforme si :
 - Backends : Kitty (lock OK via socket) + GNOME (unlock only).
 - Scheduler : systemd --user, pas de daemon maison.
 - Fail-closed, pas d’injecteur global.
+- Match titre à H : égalité ou préfixe (un titre commence par l’autre).
 
 **Ouvert (revue UX copy / fonctionnement détaillé, puis ADR si besoin)**
 
 - Heuristique exacte « cible plausible ».
 - Résumé live : `Note` Huh vs layout deux colonnes Bubble Tea.
 - Copy des labels, `--yes`, dry-run, thème.
-- Matching de titre à H (égalité stricte vs préfixe).
 - Wayland GNOME : reporter ou abandonner ce backend sur COSMIC.
 
 ---
