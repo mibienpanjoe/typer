@@ -22,3 +22,19 @@ func TestCardContainsCancel(t *testing.T) {
 		t.Fatalf("%s", got)
 	}
 }
+
+func TestRecapUsesTypedTime(t *testing.T) {
+	targets := map[string]domain.Target{
+		"0": {Emulator: domain.EmulatorKitty, Title: ": hi | afrikopps"},
+	}
+	got := Recap(targets, &formState{Choice: "0", At: "06:34", Message: "continue"})
+	if !strings.Contains(got, "À 06:34") {
+		t.Fatalf("%s", got)
+	}
+	if strings.Contains(got, "??:??") {
+		t.Fatal(got)
+	}
+	if strings.Contains(got, "Kitty · :") {
+		t.Fatalf("colon leaked: %s", got)
+	}
+}

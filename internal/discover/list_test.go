@@ -63,6 +63,13 @@ func TestLabelNeverPIDAlone(t *testing.T) {
 	}
 }
 
+func TestLabelTrimsKittyColonPrefix(t *testing.T) {
+	got := Label(domain.Target{Emulator: domain.EmulatorKitty, Title: ": hi | afrikopps"})
+	if got != "Kitty · hi | afrikopps" {
+		t.Fatalf("got %q", got)
+	}
+}
+
 func TestPickForYesSinglePlausible(t *testing.T) {
 	targets := []domain.Target{
 		{Emulator: domain.EmulatorGnome, Title: "Terminal"},

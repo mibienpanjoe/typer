@@ -15,6 +15,32 @@ import (
 	"github.com/mibienpanjoe/typer/internal/domain"
 )
 
+type formState struct {
+	Choice  string
+	At      string
+	Message string
+}
+
+func Recap(targets map[string]domain.Target, st *formState) string {
+	t, found := targets[st.Choice]
+	if !found {
+		return "Choisissez une fenêtre, une heure HH:MM, et le texte."
+	}
+	when := strings.TrimSpace(st.At)
+	if when == "" {
+		when = "??:??"
+	}
+	msg := strings.TrimSpace(st.Message)
+	if msg == "" {
+		msg = domain.DefaultMessage
+	}
+	warn := ""
+	if t.Emulator == domain.EmulatorGnome || t.KittyID == nil {
+		warn = "\n⚠ Écran verrouillé à l'heure H : l'envoi clavier échouera."
+	}
+	return fmt.Sprintf("À %s, envoyer « %s » + Entrée\n→ %s%s", when, msg, discover.Label(t), warn)
+}
+
 func RunForm(targets []domain.Target, at, message string) (app.FormResult, error) {
 	byID := map[string]domain.Target{}
 	opts := make([]huh.Option[string], 0, len(targets))
@@ -24,39 +50,21 @@ func RunForm(targets []domain.Target, at, message string) (app.FormResult, error
 		opts = append(opts, huh.NewOption(discover.Label(t), id))
 	}
 
-	choice := ""
+	st := &formState{At: at, Message: message}
+	if st.Message == "" {
+		st.Message = domain.DefaultMessage
+	}
 	if p, err := discover.PickForYes(targets); err == nil {
 		for i, t := range targets {
 			if t.Identity() == p.Identity() {
-				choice = fmt.Sprintf("%d", i)
+				st.Choice = fmt.Sprintf("%d", i)
 				break
 			}
 		}
 	}
-	if message == "" {
-		message = domain.DefaultMessage
-	}
-	ok := false
 
-	summary := func() string {
-		t, found := byID[choice]
-		if !found {
-			return "Choisissez une fenêtre, une heure HH:MM, et le texte à envoyer."
-		}
-		warn := ""
-		if t.Emulator == domain.EmulatorGnome {
-			warn = "\n⚠ GNOME : échouera si l'écran est verrouillé à cette heure."
-		}
-		msg := message
-		if strings.TrimSpace(msg) == "" {
-			msg = domain.DefaultMessage
-		}
-		when := at
-		if when == "" {
-			when = "??:??"
-		}
-		return fmt.Sprintf("À %s, envoyer « %s » + Entrée\n→ %s%s", when, msg, discover.Label(t), warn)
-	}
+	ok := false
+	recap := func() string { return Recap(byID, st) }
 
 	form := huh.NewForm(
 		huh.NewGroup(
@@ -64,21 +72,24 @@ func RunForm(targets []domain.Target, at, message string) (app.FormResult, error
 				Title("Cible").
 				Description("Fenêtre qui recevra le prompt").
 				Options(opts...).
-				Value(&choice),
+				Value(&st.Choice),
 			huh.NewInput().
 				Title("Heure").
 				Placeholder("06:34").
-				Value(&at).
+				Value(&st.At).
 				Validate(func(s string) error {
 					_, err := domain.ParseClock(s, time.Now())
 					return err
 				}),
 			huh.NewInput().
 				Title("Message").
-				Value(&message),
+				Value(&st.Message),
+			huh.NewNote().
+				Title("Résumé").
+				DescriptionFunc(recap, st),
 			huh.NewConfirm().
-				Title("Programmer ?").
-				DescriptionFunc(summary, []any{&choice, &at, &message}).
+				Title("Programmer ce job ?").
+				DescriptionFunc(recap, st).
 				Affirmative("Programmer").
 				Negative("Annuler").
 				Value(&ok),
@@ -93,11 +104,11 @@ func RunForm(targets []domain.Target, at, message string) (app.FormResult, error
 		}
 		return app.FormResult{}, err
 	}
-	t, exists := byID[choice]
+	t, exists := byID[st.Choice]
 	if !exists {
 		return app.FormResult{Confirm: false}, fmt.Errorf("cible invalide")
 	}
-	return app.FormResult{Target: t, At: at, Message: message, Confirm: ok}, nil
+	return app.FormResult{Target: t, At: st.At, Message: st.Message, Confirm: ok}, nil
 }
 
 func Card(job domain.Job, warn string) string {

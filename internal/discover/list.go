@@ -12,7 +12,7 @@ func Label(t domain.Target) string {
 	if t.Emulator == domain.EmulatorGnome {
 		emu = "GNOME"
 	}
-	title := strings.TrimSpace(t.Title)
+	title := cleanTitle(t.Title)
 	if title == "" {
 		title = t.WindowID
 	}
@@ -20,6 +20,12 @@ func Label(t domain.Target) string {
 		return emu + " · " + title + " · " + filepath.Base(*t.CWD)
 	}
 	return emu + " · " + title
+}
+
+func cleanTitle(title string) string {
+	title = strings.TrimSpace(title)
+	title = strings.TrimPrefix(title, ":")
+	return strings.TrimSpace(title)
 }
 
 func IsPlausible(t domain.Target) bool {
