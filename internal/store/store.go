@@ -52,6 +52,10 @@ func (s *Store) LogPath() string {
 	return filepath.Join(s.Root, "log.jsonl")
 }
 
+func (s *Store) JobPath(id string) string {
+	return s.jobPath(id)
+}
+
 func (s *Store) jobPath(id string) string {
 	return filepath.Join(s.JobsDir(), id+".json")
 }

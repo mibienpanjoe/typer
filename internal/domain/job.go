@@ -1,6 +1,8 @@
 package domain
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"time"
@@ -33,6 +35,21 @@ type Job struct {
 	Backend     string    `json:"backend"`
 	Target      Target    `json:"target"`
 	SystemdUnit string    `json:"systemd_unit"`
+}
+
+func NewID() string {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return fmt.Sprintf("%d", time.Now().UnixNano())
+	}
+	return hex.EncodeToString(b[:])
+}
+
+func (t Target) Identity() string {
+	if t.KittyID != nil && *t.KittyID != "" {
+		return "kitty:" + *t.KittyID
+	}
+	return t.Emulator + ":" + t.WindowID
 }
 
 func ParseClock(s string, now time.Time) (time.Time, error) {
