@@ -60,8 +60,20 @@ func (d Deps) run() discover.Runner {
 	return discover.DefaultRunner
 }
 
+func (d Deps) getenv(key string) string {
+	if d.Getenv != nil {
+		return d.Getenv(key)
+	}
+	return os.Getenv(key)
+}
+
 func Schedule(d Deps, atFlag, message string, yes bool) int {
 	msg, err := domain.ValidateMessage(message)
+	if err != nil {
+		fmt.Fprintln(d.Stderr, err)
+		return ExitUser
+	}
+	submitKey, err := domain.NormalizeSubmitKey(d.getenv("TYPER_SUBMIT_KEY"))
 	if err != nil {
 		fmt.Fprintln(d.Stderr, err)
 		return ExitUser
@@ -170,6 +182,7 @@ func Schedule(d Deps, atFlag, message string, yes bool) int {
 		CreatedAt:   d.now(),
 		At:          when,
 		Message:     msg,
+		SubmitKey:   submitKey,
 		Backend:     backendName,
 		Target:      target,
 		SystemdUnit: schedule.UnitName(id),
@@ -179,9 +192,9 @@ func Schedule(d Deps, atFlag, message string, yes bool) int {
 		return ExitUser
 	}
 	environment := []string{"TYPER_STATE=" + d.Store.Root}
-	if backendName == domain.BackendGnome && d.Getenv != nil {
+	if backendName == domain.BackendGnome {
 		for _, key := range []string{"DISPLAY", "XAUTHORITY", "XDG_SESSION_TYPE", "PATH"} {
-			if value := d.Getenv(key); value != "" {
+			if value := d.getenv(key); value != "" {
 				environment = append(environment, key+"="+value)
 			}
 		}
@@ -209,7 +222,7 @@ func Receipt(job domain.Job, warn string) string {
 	var b strings.Builder
 	b.WriteString("\n")
 	b.WriteString("  Typer · job enregistré\n")
-	b.WriteString(fmt.Sprintf("  À %s  envoyer « %s » + Entrée\n", job.At.Format("15:04"), job.Message))
+	b.WriteString(fmt.Sprintf("  À %s  envoyer « %s » puis soumettre (%s)\n", job.At.Format("15:04"), job.Message, submitLabel(job.SubmitKey)))
 	b.WriteString(fmt.Sprintf("  → %s\n", discover.Label(job.Target)))
 	b.WriteString(fmt.Sprintf("  id %s\n", job.ID))
 	b.WriteString(fmt.Sprintf("  Annuler : typer cancel %s\n", job.ID))
@@ -218,6 +231,17 @@ func Receipt(job domain.Job, warn string) string {
 	}
 	b.WriteString("\n")
 	return b.String()
+}
+
+func submitLabel(key string) string {
+	normalized, err := domain.NormalizeSubmitKey(key)
+	if err != nil {
+		normalized = domain.DefaultSubmitKey
+	}
+	if normalized == "enter" {
+		return "Entrée"
+	}
+	return "Ctrl+J"
 }
 
 func List(d Deps) int {
@@ -289,9 +313,9 @@ func Fire(d Deps, id string) int {
 	send := func(job domain.Job) error {
 		switch job.Backend {
 		case domain.BackendKitty:
-			return backend.SendKitty(d.run(), job.Target, job.Message)
+			return backend.SendKitty(d.run(), job.Target, job.Message, job.SubmitKey)
 		case domain.BackendGnome:
-			return backend.SendGnome(d.run(), false, job.Target, job.Message)
+			return backend.SendGnome(d.run(), false, job.Target, job.Message, job.SubmitKey)
 		default:
 			return fmt.Errorf("backend inconnu %s", job.Backend)
 		}

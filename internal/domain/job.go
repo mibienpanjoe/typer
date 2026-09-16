@@ -13,12 +13,13 @@ import (
 var clockPattern = regexp.MustCompile(`^(\d{2}):(\d{2})$`)
 
 const (
-	DefaultMessage  = "continue"
-	MaxMessageBytes = 4096
-	BackendKitty    = "kitty"
-	BackendGnome    = "gnome"
-	EmulatorKitty   = "kitty"
-	EmulatorGnome   = "gnome-terminal"
+	DefaultMessage   = "continue"
+	DefaultSubmitKey = "ctrl+j"
+	MaxMessageBytes  = 4096
+	BackendKitty     = "kitty"
+	BackendGnome     = "gnome"
+	EmulatorKitty    = "kitty"
+	EmulatorGnome    = "gnome-terminal"
 )
 
 type Target struct {
@@ -38,6 +39,7 @@ type Job struct {
 	CreatedAt   time.Time `json:"created_at"`
 	At          time.Time `json:"at"`
 	Message     string    `json:"message"`
+	SubmitKey   string    `json:"submit_key,omitempty"`
 	Backend     string    `json:"backend"`
 	Target      Target    `json:"target"`
 	SystemdUnit string    `json:"systemd_unit"`
@@ -89,4 +91,18 @@ func ValidateMessage(s string) (string, error) {
 		return "", fmt.Errorf("message trop long (%d octets, max %d)", len(s), MaxMessageBytes)
 	}
 	return s, nil
+}
+
+func NormalizeSubmitKey(s string) (string, error) {
+	s = strings.ToLower(strings.TrimSpace(s))
+	switch s {
+	case "":
+		return DefaultSubmitKey, nil
+	case "enter", "return":
+		return "enter", nil
+	case "ctrl+j", "control+j", "c-j", "cj":
+		return "ctrl+j", nil
+	default:
+		return "", fmt.Errorf("touche de soumission invalide %q (attendu enter ou ctrl+j)", s)
+	}
 }

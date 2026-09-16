@@ -82,7 +82,7 @@ func RunForm(targets []domain.Target, pending []domain.Job, at, message string) 
 				}),
 			huh.NewInput().
 				Title("Message").
-				Description("Texte envoyé, suivi d'Entrée").
+				Description("Texte envoyé, puis soumis").
 				Value(&st.Message).
 				Validate(func(s string) error {
 					_, err := domain.ValidateMessage(s)
@@ -149,7 +149,7 @@ func Summary(target *domain.Target, at, message string, now time.Time) string {
 	if target == nil || timeErr != nil || messageErr != nil {
 		return "Complétez la cible, l'heure et le message pour afficher le récapitulatif."
 	}
-	text := fmt.Sprintf("%s, envoyer « %s » + Entrée\n→ %s", formatWhen(when, now), msg, discover.Label(*target))
+	text := fmt.Sprintf("%s, envoyer « %s » puis soumettre\n→ %s", formatWhen(when, now), msg, discover.Label(*target))
 	if target.Emulator == domain.EmulatorGnome {
 		text += "\n⚠ GNOME : l'envoi échouera si l'écran est verrouillé. Gardez l'onglet agent actif."
 	}
@@ -171,9 +171,10 @@ func formatWhen(at, now time.Time) string {
 
 func Card(job domain.Job, warn string) string {
 	inner := fmt.Sprintf(
-		"Typer · job enregistré\n%s, envoyer « %s » + Entrée\n→ %s\nid %s\nAnnuler : typer cancel %s",
+		"Typer · job enregistré\n%s, envoyer « %s » puis soumettre (%s)\n→ %s\nid %s\nAnnuler : typer cancel %s",
 		formatWhen(job.At, time.Now()),
 		job.Message,
+		submitLabel(job.SubmitKey),
 		discover.Label(job.Target),
 		job.ID,
 		job.ID,
@@ -182,6 +183,17 @@ func Card(job domain.Job, warn string) string {
 		inner += "\n" + warn
 	}
 	return box().Render(inner) + "\n"
+}
+
+func submitLabel(key string) string {
+	normalized, err := domain.NormalizeSubmitKey(key)
+	if err != nil {
+		normalized = domain.DefaultSubmitKey
+	}
+	if normalized == "enter" {
+		return "Entrée"
+	}
+	return "Ctrl+J"
 }
 
 func box() lipgloss.Style {

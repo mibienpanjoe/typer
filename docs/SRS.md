@@ -123,8 +123,14 @@ Flags :
 | Flag | Sémantique |
 |---|---|
 | `--at HH:MM` | Aujourd’hui si encore dans le futur (horloge locale). Si l’heure est déjà passée aujourd’hui → **demain** cette heure-là. |
-| `-m, --message` | Texte à envoyer, sans le newline final (Typer ajoute Entrée). Défaut : `continue`. |
+| `-m, --message` | Texte à envoyer, sans touche finale. Défaut : `continue`. |
 | `--yes` | Saute la confirmation si et seulement si la cible a été passée de façon non ambiguë (une seule candidate auto, ou id explicite). Sinon erreur. |
+
+Variable d'environnement :
+
+| Variable | Sémantique |
+|---|---|
+| `TYPER_SUBMIT_KEY` | Touche de soumission capturée dans le job. Valeurs : `ctrl+j` (défaut, robuste pour Codex) ou `enter`. |
 
 Hors v1 (réservés, ne pas implémenter sans mise à jour SRS) : `--dry-run`, `--at` ISO datetime, ciblage par PID en flag.
 
@@ -154,6 +160,7 @@ Schéma job (champs requis) :
   "created_at": "RFC3339",
   "at": "RFC3339",
   "message": "string",
+  "submit_key": "ctrl+j | enter",
   "backend": "kitty" | "gnome",
   "target": {
     "emulator": "kitty" | "gnome-terminal",
@@ -176,8 +183,8 @@ Le message est une donnée sensible (peut coller un secret par erreur). Pas de c
 | Système | Usage | Contrainte |
 |---|---|---|
 | `systemd-run --user` | Calendar one-shot → `typer fire <id>` | Unité `typer-job-<id>.service` ; se retire après |
-| Kitty remote control | `send-text` + newline vers la fenêtre matchée | Socket local ; pas TCP |
-| Fenêtre GNOME (X11) | Active la fenêtre snapshot, vérifie son id actif, puis envoie les keysyms | Pas de fallback vers une autre fenêtre ; revérification avant Entrée |
+| Kitty remote control | `send-text` + touche de soumission vers la fenêtre matchée | Socket local ; pas TCP |
+| Fenêtre GNOME (X11) | Active la fenêtre snapshot, vérifie son id actif, puis envoie les keysyms | Pas de fallback vers une autre fenêtre ; revérification avant soumission |
 | `notify-send` | P3 seulement | Absence = pas d’échec du job |
 
 Typer n’ouvre **aucune** socket réseau, n’appelle aucun HTTP.
@@ -198,7 +205,7 @@ Typer n’ouvre **aucune** socket réseau, n’appelle aucun HTTP.
 
 ### Programmation
 
-**FR-05** Un job = une cible + une heure H + un message + Entrée. Pas de répétition.
+**FR-05** Un job = une cible + une heure H + un message + une touche de soumission. Pas de répétition.
 
 **FR-06** Heure saisie en `HH:MM` locale selon §3.1. Refus si format invalide.
 
@@ -228,9 +235,9 @@ Typer n’ouvre **aucune** socket réseau, n’appelle aucun HTTP.
 
 **FR-12** Si la revalidation échoue, Typer **n’essaie aucune autre fenêtre**.
 
-**FR-13** Backend `kitty` : envoi du message puis newline via remote control vers **cette** fenêtre. Doit fonctionner écran verrouillé si le socket Kitty est accessible.
+**FR-13** Backend `kitty` : envoi du message puis touche de soumission via remote control vers **cette** fenêtre. Doit fonctionner écran verrouillé si le socket Kitty est accessible.
 
-**FR-14** Backend `gnome` : envoi du message puis Entrée uniquement si la session est déverrouillée **et** la fenêtre cible toujours adressable. Sinon échec journalisé, pas de fallback Kitty, pas de fallback focus.
+**FR-14** Backend `gnome` : envoi du message puis touche de soumission uniquement si la session est déverrouillée **et** la fenêtre cible toujours adressable. Sinon échec journalisé, pas de fallback Kitty, pas de fallback focus.
 
 **FR-15** Après tentative (succès ou échec terminal), le fichier job et l’unité systemd associée sont retirés.
 

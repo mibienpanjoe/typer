@@ -60,6 +60,39 @@ func TestScheduleYesOneTarget(t *testing.T) {
 	if !strings.Contains(out.String(), "typer cancel") {
 		t.Fatalf("receipt %s", out.String())
 	}
+	if jobs[0].SubmitKey != domain.DefaultSubmitKey {
+		t.Fatalf("submit key %q", jobs[0].SubmitKey)
+	}
+}
+
+func TestScheduleSnapshotsSubmitKeyFromEnv(t *testing.T) {
+	var errb bytes.Buffer
+	s := store.New(t.TempDir())
+	code := Schedule(Deps{
+		Store:  s,
+		Now:    func() time.Time { return time.Date(2026, 9, 15, 3, 0, 0, 0, time.Local) },
+		Runner: desktopRun(t),
+		Stdout: ioDiscard{},
+		Stderr: &errb,
+		IsTTY:  func() bool { return false },
+		Exe:    "/usr/bin/typer",
+		Getenv: func(key string) string {
+			if key == "TYPER_SUBMIT_KEY" {
+				return "enter"
+			}
+			return ""
+		},
+	}, "06:34", "continue", true)
+	if code != ExitOK {
+		t.Fatalf("code %d err=%s", code, errb.String())
+	}
+	jobs, err := s.ListJobs()
+	if err != nil || len(jobs) != 1 {
+		t.Fatalf("jobs %v %v", jobs, err)
+	}
+	if jobs[0].SubmitKey != "enter" {
+		t.Fatalf("submit key %q", jobs[0].SubmitKey)
+	}
 }
 
 func TestScheduleConflict(t *testing.T) {

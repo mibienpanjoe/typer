@@ -13,9 +13,13 @@ import (
 
 var ErrLocked = errors.New("session verrouillée : impossible d'injecter au clavier")
 
-func SendKitty(run discover.Runner, target domain.Target, message string) error {
+func SendKitty(run discover.Runner, target domain.Target, message, submitKey string) error {
 	if run == nil {
 		run = discover.DefaultRunner
+	}
+	key, err := submitKeyForBackend(submitKey, domain.BackendKitty)
+	if err != nil {
+		return err
 	}
 	if target.KittyID != nil && *target.KittyID != "" && target.ListenOn != nil && strings.HasPrefix(*target.ListenOn, "unix:") {
 		match := "id:" + *target.KittyID
@@ -23,15 +27,15 @@ func SendKitty(run discover.Runner, target domain.Target, message string) error 
 		if _, err := run("kitty", append(prefix, "send-text", "--match", match, "--", message)...); err != nil {
 			return fmt.Errorf("kitty send-text (id %s): %w", *target.KittyID, err)
 		}
-		if _, err := run("kitty", append(prefix, "send-key", "--match", match, "Enter")...); err != nil {
-			return fmt.Errorf("kitty send-key Enter (id %s): %w", *target.KittyID, err)
+		if _, err := run("kitty", append(prefix, "send-key", "--match", match, key)...); err != nil {
+			return fmt.Errorf("kitty send-key %s (id %s): %w", key, *target.KittyID, err)
 		}
 		return nil
 	}
 	return fmt.Errorf("cible Kitty sans socket Unix remote-control et kitty id")
 }
 
-func SendGnome(run discover.Runner, locked bool, target domain.Target, message string) error {
+func SendGnome(run discover.Runner, locked bool, target domain.Target, message, submitKey string) error {
 	if locked {
 		return ErrLocked
 	}
@@ -41,10 +45,14 @@ func SendGnome(run discover.Runner, locked bool, target domain.Target, message s
 	if target.WindowID == "" {
 		return fmt.Errorf("cible GNOME sans window id")
 	}
-	return typeIntoWindow(run, target.WindowID, message)
+	key, err := submitKeyForBackend(submitKey, domain.BackendGnome)
+	if err != nil {
+		return err
+	}
+	return typeIntoWindow(run, target.WindowID, message, key)
 }
 
-func typeIntoWindow(run discover.Runner, windowID, message string) error {
+func typeIntoWindow(run discover.Runner, windowID, message, submitKey string) error {
 	if _, err := run("xdotool", "windowactivate", "--sync", windowID); err != nil {
 		return fmt.Errorf("xdotool windowactivate %s: %w", windowID, err)
 	}
@@ -60,10 +68,31 @@ func typeIntoWindow(run discover.Runner, windowID, message string) error {
 	if _, err := run("xdotool", "windowactivate", "--sync", windowID); err != nil {
 		return fmt.Errorf("xdotool windowactivate (avant Entrée) %s: %w", windowID, err)
 	}
-	if _, err := run("xdotool", "key", "--clearmodifiers", "Return"); err != nil {
-		return fmt.Errorf("xdotool key Return: %w", err)
+	if _, err := run("xdotool", "key", "--clearmodifiers", submitKey); err != nil {
+		return fmt.Errorf("xdotool key %s: %w", submitKey, err)
 	}
 	return nil
+}
+
+func submitKeyForBackend(value, backendName string) (string, error) {
+	key, err := domain.NormalizeSubmitKey(value)
+	if err != nil {
+		return "", err
+	}
+	switch backendName {
+	case domain.BackendKitty:
+		if key == "enter" {
+			return "Enter", nil
+		}
+		return "ctrl+j", nil
+	case domain.BackendGnome:
+		if key == "enter" {
+			return "Return", nil
+		}
+		return "ctrl+j", nil
+	default:
+		return "", fmt.Errorf("backend inconnu %s", backendName)
+	}
 }
 
 func requireActiveWindow(run discover.Runner, windowID string) error {

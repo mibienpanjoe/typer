@@ -20,13 +20,16 @@ const usage = `Usage: typer [flags]
        typer cancel [id]
        typer fire <id>
 
-Programme un envoi unique (texte + Entrée) vers une fenêtre Kitty ou GNOME Terminal.
+Programme un envoi unique (texte + soumission) vers une fenêtre Kitty ou GNOME Terminal.
 
 Flags:
   --at HH:MM        Heure locale d'envoi
   -m, --message     Texte à envoyer (défaut: continue)
   --yes             Confirme sans prompt si la cible est non ambiguë
   -h, --help        Aide
+
+Env:
+  TYPER_SUBMIT_KEY  Touche finale: ctrl+j (défaut) ou enter
 
 Commandes:
   list              Jobs en attente

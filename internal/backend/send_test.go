@@ -16,7 +16,7 @@ func TestSendKittyMatchesOnlySnapshotID(t *testing.T) {
 		calls = append(calls, name+" "+strings.Join(args, " "))
 		return nil, nil
 	}
-	err := SendKitty(run, domain.Target{KittyID: &kid, ListenOn: &to}, "continue")
+	err := SendKitty(run, domain.Target{KittyID: &kid, ListenOn: &to}, "continue", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,8 +29,8 @@ func TestSendKittyMatchesOnlySnapshotID(t *testing.T) {
 	if strings.HasSuffix(calls[0], "\n") || strings.Contains(calls[0], "continue\n") {
 		t.Fatalf("LF is not Enter: %q", calls[0])
 	}
-	if !strings.Contains(calls[1], "send-key") || !strings.Contains(calls[1], "Enter") {
-		t.Fatalf("missing Enter: %v", calls)
+	if !strings.Contains(calls[1], "send-key") || !strings.Contains(calls[1], "ctrl+j") {
+		t.Fatalf("missing submit key: %v", calls)
 	}
 	if strings.Contains(calls[0], "id:1") && !strings.Contains(calls[0], "id:3") {
 		t.Fatal("wrong id")
@@ -45,7 +45,7 @@ func TestSendKittyUsesListenOn(t *testing.T) {
 		calls = append(calls, strings.Join(args, " "))
 		return nil, nil
 	}
-	err := SendKitty(run, domain.Target{KittyID: &kid, ListenOn: &to}, "continue")
+	err := SendKitty(run, domain.Target{KittyID: &kid, ListenOn: &to}, "continue", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,10 +63,26 @@ func TestSendKittyRequiresSocketAndID(t *testing.T) {
 		err := SendKitty(func(string, ...string) ([]byte, error) {
 			t.Fatal("should not run")
 			return nil, nil
-		}, target, "x")
+		}, target, "x", "")
 		if err == nil {
 			t.Fatal("want error")
 		}
+	}
+}
+
+func TestSendKittyCanUseEnterWhenConfigured(t *testing.T) {
+	kid := "3"
+	to := "unix:/run/user/1000/kitty"
+	var calls []string
+	run := func(name string, args ...string) ([]byte, error) {
+		calls = append(calls, strings.Join(args, " "))
+		return nil, nil
+	}
+	if err := SendKitty(run, domain.Target{KittyID: &kid, ListenOn: &to}, "continue", "enter"); err != nil {
+		t.Fatal(err)
+	}
+	if len(calls) != 2 || !strings.Contains(calls[1], "send-key") || !strings.Contains(calls[1], "Enter") {
+		t.Fatalf("%v", calls)
 	}
 }
 
@@ -75,7 +91,7 @@ func TestSendGnomeLockedDoesNotType(t *testing.T) {
 	err := SendGnome(func(string, ...string) ([]byte, error) {
 		ran = true
 		return nil, nil
-	}, true, domain.Target{WindowID: "0x1"}, "continue")
+	}, true, domain.Target{WindowID: "0x1"}, "continue", "")
 	if !errors.Is(err, ErrLocked) {
 		t.Fatalf("%v", err)
 	}
@@ -93,7 +109,7 @@ func TestSendGnomeTargetsWindow(t *testing.T) {
 		}
 		return nil, nil
 	}
-	if err := SendGnome(run, false, domain.Target{WindowID: "0xabc"}, "hello"); err != nil {
+	if err := SendGnome(run, false, domain.Target{WindowID: "0xabc"}, "hello", ""); err != nil {
 		t.Fatal(err)
 	}
 	if len(calls) != 5 {
@@ -106,7 +122,24 @@ func TestSendGnomeTargetsWindow(t *testing.T) {
 	if strings.Contains(joined, "type --clearmodifiers --window") {
 		t.Fatal("GNOME ignores SendEvent typing to its top-level window")
 	}
-	if !strings.Contains(joined, "type --clearmodifiers -- hello") || !strings.Contains(joined, "key --clearmodifiers Return") {
+	if !strings.Contains(joined, "type --clearmodifiers -- hello") || !strings.Contains(joined, "key --clearmodifiers ctrl+j") {
+		t.Fatalf("%v", calls)
+	}
+}
+
+func TestSendGnomeCanUseEnterWhenConfigured(t *testing.T) {
+	var calls []string
+	run := func(name string, args ...string) ([]byte, error) {
+		calls = append(calls, strings.Join(args, " "))
+		if len(args) > 0 && args[0] == "getactivewindow" {
+			return []byte("2748\n"), nil
+		}
+		return nil, nil
+	}
+	if err := SendGnome(run, false, domain.Target{WindowID: "0xabc"}, "hello", "enter"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.Join(calls, " "), "key --clearmodifiers Return") {
 		t.Fatalf("%v", calls)
 	}
 }
@@ -125,14 +158,14 @@ func TestSendGnomeSendsReturnEvenIfFocusFlickersAfterType(t *testing.T) {
 		}
 		return nil, nil
 	}
-	if err := SendGnome(run, false, domain.Target{WindowID: "0xabc"}, "hi"); err != nil {
+	if err := SendGnome(run, false, domain.Target{WindowID: "0xabc"}, "hi", ""); err != nil {
 		t.Fatal(err)
 	}
 	joined := strings.Join(calls, " ")
 	if !strings.Contains(joined, "type --clearmodifiers -- hi") {
 		t.Fatalf("missing type: %v", calls)
 	}
-	if !strings.Contains(joined, "key --clearmodifiers Return") {
+	if !strings.Contains(joined, "key --clearmodifiers ctrl+j") {
 		t.Fatalf("Enter skipped after type: %v", calls)
 	}
 }
@@ -146,7 +179,7 @@ func TestSendGnomeRefusesWhenActivatedWindowDoesNotMatch(t *testing.T) {
 		}
 		return nil, nil
 	}
-	err := SendGnome(run, false, domain.Target{WindowID: "0xabc"}, "hello")
+	err := SendGnome(run, false, domain.Target{WindowID: "0xabc"}, "hello", "")
 	if err == nil || !strings.Contains(err.Error(), "fenêtre active") {
 		t.Fatalf("err=%v", err)
 	}

@@ -36,16 +36,22 @@ Jobs remember the **binary path** from schedule time. After moving the install, 
 1. The agent is already open in **Kitty** or **GNOME Terminal** (not Cursor’s integrated terminal).
 2. Open a **second** terminal — the agent owns the first TUI.
 3. Run `typer`.
-4. Pick the agent window, set local time `HH:MM`, keep or edit the message (default `continue`).
+4. Pick the agent window, set local 24h time `HH:MM`, keep or edit the message (default `continue`).
 5. **Enter** on Message saves the job. Esc cancels. You get a receipt with the id and `typer cancel …`.
 
-Leave the PC **on** (sleep/suspend is not handled). At that time Typer checks the window is still the same one, types the text, presses Enter, logs the result, and deletes the job.
+Leave the PC **on** (sleep/suspend is not handled). At that time Typer checks the window is still the same one, types the text, submits it, logs the result, and deletes the job.
 
 `--at` and `-m` pre-fill the form. `--yes` skips the form only if there is exactly one plausible agent window.
 
 ```bash
 typer --at 06:34 -m continue
 typer --at 06:34 -m continue --yes   # one unambiguous target
+```
+
+By default Typer submits with `ctrl+j`, which avoids Codex composer modes where plain Enter inserts a new line. If your agent expects a regular Enter key, schedule with:
+
+```bash
+TYPER_SUBMIT_KEY=enter typer
 ```
 
 ## Commands

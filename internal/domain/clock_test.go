@@ -83,3 +83,43 @@ func TestValidateMessageAcceptsMaxLength(t *testing.T) {
 		t.Fatal("truncated")
 	}
 }
+
+func TestNormalizeSubmitKeyDefaultsToCtrlJ(t *testing.T) {
+	got, err := NormalizeSubmitKey("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "ctrl+j" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestNormalizeSubmitKeyAcceptsEnterAliases(t *testing.T) {
+	for _, in := range []string{"enter", "Return", " return "} {
+		got, err := NormalizeSubmitKey(in)
+		if err != nil {
+			t.Fatalf("%q: %v", in, err)
+		}
+		if got != "enter" {
+			t.Fatalf("%q: got %q", in, got)
+		}
+	}
+}
+
+func TestNormalizeSubmitKeyAcceptsCtrlJAliases(t *testing.T) {
+	for _, in := range []string{"ctrl+j", "Control+J", "c-j", "cj"} {
+		got, err := NormalizeSubmitKey(in)
+		if err != nil {
+			t.Fatalf("%q: %v", in, err)
+		}
+		if got != "ctrl+j" {
+			t.Fatalf("%q: got %q", in, got)
+		}
+	}
+}
+
+func TestNormalizeSubmitKeyRejectsUnknown(t *testing.T) {
+	if _, err := NormalizeSubmitKey("shift+enter"); err == nil {
+		t.Fatal("want error")
+	}
+}
