@@ -20,11 +20,17 @@ func TestSendKittyMatchesOnlySnapshotID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(calls) != 1 {
+	if len(calls) != 2 {
 		t.Fatalf("%v", calls)
 	}
-	if !strings.Contains(calls[0], "--match id:3") {
+	if !strings.Contains(calls[0], "send-text") || !strings.Contains(calls[0], "--match id:3") {
 		t.Fatalf("%s", calls[0])
+	}
+	if strings.HasSuffix(calls[0], "\n") || strings.Contains(calls[0], "continue\n") {
+		t.Fatalf("LF is not Enter: %q", calls[0])
+	}
+	if !strings.Contains(calls[1], "send-key") || !strings.Contains(calls[1], "Enter") {
+		t.Fatalf("missing Enter: %v", calls)
 	}
 	if strings.Contains(calls[0], "id:1") && !strings.Contains(calls[0], "id:3") {
 		t.Fatal("wrong id")
@@ -45,6 +51,9 @@ func TestSendKittyUsesListenOn(t *testing.T) {
 	}
 	if !strings.Contains(calls[0], "--to unix:/run/user/1000/kitty") {
 		t.Fatalf("%s", calls[0])
+	}
+	if len(calls) < 2 || !strings.Contains(calls[1], "send-key") || !strings.Contains(calls[1], "--to unix:/run/user/1000/kitty") {
+		t.Fatalf("%v", calls)
 	}
 }
 

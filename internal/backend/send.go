@@ -18,10 +18,12 @@ func SendKitty(run discover.Runner, target domain.Target, message string) error 
 	}
 	if target.KittyID != nil && *target.KittyID != "" && target.ListenOn != nil && strings.HasPrefix(*target.ListenOn, "unix:") {
 		match := "id:" + *target.KittyID
-		args := []string{"@", "--to", *target.ListenOn}
-		args = append(args, "send-text", "--match", match, "--", message+"\n")
-		if _, err := run("kitty", args...); err != nil {
+		prefix := []string{"@", "--to", *target.ListenOn}
+		if _, err := run("kitty", append(prefix, "send-text", "--match", match, "--", message)...); err != nil {
 			return fmt.Errorf("kitty send-text (id %s): %w", *target.KittyID, err)
+		}
+		if _, err := run("kitty", append(prefix, "send-key", "--match", match, "Enter")...); err != nil {
+			return fmt.Errorf("kitty send-key Enter (id %s): %w", *target.KittyID, err)
 		}
 		return nil
 	}
