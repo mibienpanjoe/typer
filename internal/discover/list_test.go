@@ -106,6 +106,7 @@ func TestPickForYesNone(t *testing.T) {
 }
 
 func TestAllMergesKittyAndGnome(t *testing.T) {
+	kittySocket(t)
 	run := func(name string, args ...string) ([]byte, error) {
 		switch name {
 		case "kitty":

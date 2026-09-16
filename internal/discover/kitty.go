@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/mibienpanjoe/typer/internal/domain"
 )
@@ -55,17 +56,8 @@ func ListKitty(run Runner) ([]domain.Target, error) {
 		run = DefaultRunner
 	}
 
-	if out, err := run("kitty", "@", "ls"); err == nil {
-		targets, perr := parseKittyLS(out, "")
-		if perr == nil && len(targets) > 0 {
-			return targets, nil
-		}
-		if perr != nil {
-			return nil, perr
-		}
-	}
-
 	var last error
+	var all []domain.Target
 	for _, to := range kittyListenAddrs() {
 		out, err := run("kitty", "@", "--to", to, "ls")
 		if err != nil {
@@ -77,22 +69,15 @@ func ListKitty(run Runner) ([]domain.Target, error) {
 			last = err
 			continue
 		}
-		if len(targets) > 0 {
-			return targets, nil
-		}
+		all = append(all, targets...)
 	}
-
-	targets, err := listKittyX11(run)
-	if err == nil && len(targets) > 0 {
-		return targets, nil
+	if len(all) > 0 {
+		return all, nil
 	}
 	if last != nil {
 		return nil, fmt.Errorf("%w: %v", ErrRemoteControl, last)
 	}
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrRemoteControl, err)
-	}
-	return nil, fmt.Errorf("%w: aucune fenêtre Kitty (remote control + xdotool)", ErrRemoteControl)
+	return nil, fmt.Errorf("%w: configurez listen_on unix:${XDG_RUNTIME_DIR}/kitty", ErrRemoteControl)
 }
 
 func parseKittyLS(out []byte, listenOn string) ([]domain.Target, error) {
@@ -133,53 +118,44 @@ func parseKittyLS(out []byte, listenOn string) ([]domain.Target, error) {
 
 func kittyListenAddrs() []string {
 	var addrs []string
-	if v := os.Getenv("KITTY_LISTEN_ON"); v != "" {
+	if v := os.Getenv("KITTY_LISTEN_ON"); strings.HasPrefix(v, "unix:") {
 		addrs = append(addrs, v)
 	}
 	runtime := os.Getenv("XDG_RUNTIME_DIR")
 	if runtime == "" {
 		runtime = filepath.Join("/run/user", strconv.Itoa(os.Getuid()))
 	}
-	for _, dir := range []string{runtime, os.TempDir()} {
-		ents, err := os.ReadDir(dir)
-		if err != nil {
+	ents, err := os.ReadDir(runtime)
+	if err != nil {
+		return addrs
+	}
+	for _, e := range ents {
+		name := e.Name()
+		if !strings.Contains(strings.ToLower(name), "kitty") {
 			continue
 		}
-		for _, e := range ents {
-			name := e.Name()
-			if !strings.Contains(strings.ToLower(name), "kitty") {
-				continue
-			}
-			path := filepath.Join(dir, name)
-			addrs = append(addrs, "unix:"+path)
+		path := filepath.Join(runtime, name)
+		info, err := os.Lstat(path)
+		if err != nil || info.Mode()&os.ModeSocket == 0 {
+			continue
+		}
+		st, ok := info.Sys().(*syscall.Stat_t)
+		if !ok || int(st.Uid) != os.Getuid() {
+			continue
+		}
+		addr := "unix:" + path
+		if !contains(addrs, addr) {
+			addrs = append(addrs, addr)
 		}
 	}
 	return addrs
 }
 
-func listKittyX11(run Runner) ([]domain.Target, error) {
-	out, err := run("xdotool", "search", "--class", "kitty")
-	if err != nil {
-		return nil, err
+func contains(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
 	}
-	var targets []domain.Target
-	for _, id := range strings.Fields(string(out)) {
-		if id == "" {
-			continue
-		}
-		t := domain.Target{
-			Emulator: domain.EmulatorKitty,
-			WindowID: id,
-		}
-		if name, err := run("xdotool", "getwindowname", id); err == nil {
-			t.Title = strings.TrimSpace(string(name))
-		}
-		if pidb, err := run("xdotool", "getwindowpid", id); err == nil {
-			if pid, err := strconv.Atoi(strings.TrimSpace(string(pidb))); err == nil {
-				t.PID = pid
-			}
-		}
-		targets = append(targets, t)
-	}
-	return targets, nil
+	return false
 }

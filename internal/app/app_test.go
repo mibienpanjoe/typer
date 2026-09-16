@@ -14,10 +14,12 @@ import (
 
 func desktopRun(t *testing.T) discover.Runner {
 	t.Helper()
+	t.Setenv("KITTY_LISTEN_ON", "unix:/tmp/typer-test-kitty")
+	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
 	return func(name string, args ...string) ([]byte, error) {
 		switch name {
 		case "kitty":
-			if len(args) >= 2 && args[0] == "@" && args[1] == "ls" {
+			if len(args) >= 2 && args[0] == "@" && args[len(args)-1] == "ls" {
 				return []byte(`[
   {"id":1,"platform_window_id":1,"tabs":[{"windows":[
     {"id":3,"pid":4242,"cwd":"/tmp/proj","title":"Codex · proj"}

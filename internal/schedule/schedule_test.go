@@ -37,6 +37,35 @@ func TestStartInvokesSystemdRun(t *testing.T) {
 	if !strings.Contains(cmd, "--on-calendar=2026-09-15 06:34:00") {
 		t.Fatalf("%s", cmd)
 	}
+	if !strings.Contains(cmd, "--timer-property=AccuracySec=1s") || !strings.Contains(cmd, "--timer-property=RandomizedDelaySec=0") {
+		t.Fatalf("timer is not precise: %s", cmd)
+	}
+}
+
+func TestStartPassesGraphicalEnvironment(t *testing.T) {
+	var got []string
+	run := func(name string, args ...string) ([]byte, error) {
+		got = append([]string{name}, args...)
+		return nil, nil
+	}
+	err := Start(
+		run,
+		"typer-job-abc",
+		"/usr/bin/typer",
+		time.Date(2026, 9, 15, 6, 34, 0, 0, time.Local),
+		"abc",
+		"DISPLAY=:1",
+		"XAUTHORITY=/run/user/1000/gdm/Xauthority",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := strings.Join(got, " ")
+	for _, want := range []string{"--setenv=DISPLAY=:1", "--setenv=XAUTHORITY=/run/user/1000/gdm/Xauthority"} {
+		if !strings.Contains(cmd, want) {
+			t.Fatalf("missing %q: %s", want, cmd)
+		}
+	}
 }
 
 func TestStartWrapsSystemdError(t *testing.T) {

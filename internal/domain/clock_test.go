@@ -44,7 +44,7 @@ func TestParseClockUsesTomorrowWhenEqualToNow(t *testing.T) {
 
 func TestParseClockRejectsInvalid(t *testing.T) {
 	now := time.Date(2026, 9, 15, 3, 0, 0, 0, time.Local)
-	for _, in := range []string{"", "6h34", "25:00", "12:60", "ab:cd", "6:34:01"} {
+	for _, in := range []string{"", "6h34", "25:00", "12:60", "ab:cd", "6:34:01", "6:3", "06:34junk", " 06:34"} {
 		if _, err := ParseClock(in, now); err == nil {
 			t.Errorf("%q: want error", in)
 		}

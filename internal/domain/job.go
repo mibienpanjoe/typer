@@ -4,28 +4,33 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
 
+var clockPattern = regexp.MustCompile(`^(\d{2}):(\d{2})$`)
+
 const (
-	DefaultMessage   = "continue"
-	MaxMessageBytes  = 4096
-	BackendKitty     = "kitty"
-	BackendGnome     = "gnome"
-	EmulatorKitty    = "kitty"
-	EmulatorGnome    = "gnome-terminal"
+	DefaultMessage  = "continue"
+	MaxMessageBytes = 4096
+	BackendKitty    = "kitty"
+	BackendGnome    = "gnome"
+	EmulatorKitty   = "kitty"
+	EmulatorGnome   = "gnome-terminal"
 )
 
 type Target struct {
-	Emulator string  `json:"emulator"`
-	PID      int     `json:"pid"`
-	WindowID string  `json:"window_id"`
-	KittyID  *string `json:"kitty_id"`
-	ListenOn *string `json:"listen_on,omitempty"`
-	TTY      *string `json:"tty"`
-	Title    string  `json:"title"`
-	CWD      *string `json:"cwd"`
+	Emulator  string  `json:"emulator"`
+	PID       int     `json:"pid"`
+	WindowID  string  `json:"window_id"`
+	KittyID   *string `json:"kitty_id"`
+	ListenOn  *string `json:"listen_on,omitempty"`
+	SessionID *string `json:"session_id,omitempty"`
+	TTY       *string `json:"tty"`
+	Title     string  `json:"title"`
+	CWD       *string `json:"cwd"`
 }
 
 type Job struct {
@@ -48,20 +53,22 @@ func NewID() string {
 
 func (t Target) Identity() string {
 	if t.KittyID != nil && *t.KittyID != "" {
-		return "kitty:" + *t.KittyID
+		listenOn := ""
+		if t.ListenOn != nil {
+			listenOn = *t.ListenOn
+		}
+		return "kitty:" + listenOn + ":" + *t.KittyID
 	}
 	return t.Emulator + ":" + t.WindowID
 }
 
 func ParseClock(s string, now time.Time) (time.Time, error) {
-	var hour, min int
-	n, err := fmt.Sscanf(s, "%d:%d", &hour, &min)
-	if err != nil || n != 2 {
+	parts := clockPattern.FindStringSubmatch(s)
+	if parts == nil {
 		return time.Time{}, fmt.Errorf("heure invalide %q (attendu HH:MM)", s)
 	}
-	if strings.Count(s, ":") != 1 {
-		return time.Time{}, fmt.Errorf("heure invalide %q (attendu HH:MM)", s)
-	}
+	hour, _ := strconv.Atoi(parts[1])
+	min, _ := strconv.Atoi(parts[2])
 	if hour < 0 || hour > 23 || min < 0 || min > 59 {
 		return time.Time{}, fmt.Errorf("heure invalide %q", s)
 	}

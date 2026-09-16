@@ -10,12 +10,13 @@ import (
 
 func TestSendKittyMatchesOnlySnapshotID(t *testing.T) {
 	kid := "3"
+	to := "unix:/run/user/1000/kitty"
 	var calls []string
 	run := func(name string, args ...string) ([]byte, error) {
 		calls = append(calls, name+" "+strings.Join(args, " "))
 		return nil, nil
 	}
-	err := SendKitty(run, domain.Target{KittyID: &kid}, "continue")
+	err := SendKitty(run, domain.Target{KittyID: &kid, ListenOn: &to}, "continue")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,29 +48,16 @@ func TestSendKittyUsesListenOn(t *testing.T) {
 	}
 }
 
-func TestSendKittyWithoutRemoteUsesXdotool(t *testing.T) {
-	var calls []string
-	run := func(name string, args ...string) ([]byte, error) {
-		calls = append(calls, name+" "+strings.Join(args, " "))
-		return nil, nil
-	}
-	err := SendKitty(run, domain.Target{WindowID: "46137358"}, "continue")
-	if err != nil {
-		t.Fatal(err)
-	}
-	joined := strings.Join(calls, "\n")
-	if !strings.Contains(joined, "xdotool type") || !strings.Contains(joined, "--window 46137358") {
-		t.Fatalf("%s", joined)
-	}
-}
-
-func TestSendKittyRequiresID(t *testing.T) {
-	err := SendKitty(func(string, ...string) ([]byte, error) {
-		t.Fatal("should not run")
-		return nil, nil
-	}, domain.Target{}, "x")
-	if err == nil {
-		t.Fatal("want error")
+func TestSendKittyRequiresSocketAndID(t *testing.T) {
+	kid := "3"
+	for _, target := range []domain.Target{{KittyID: &kid}, {WindowID: "46137358"}} {
+		err := SendKitty(func(string, ...string) ([]byte, error) {
+			t.Fatal("should not run")
+			return nil, nil
+		}, target, "x")
+		if err == nil {
+			t.Fatal("want error")
+		}
 	}
 }
 
@@ -91,19 +79,43 @@ func TestSendGnomeTargetsWindow(t *testing.T) {
 	var calls []string
 	run := func(name string, args ...string) ([]byte, error) {
 		calls = append(calls, strings.Join(args, " "))
+		if len(args) > 0 && args[0] == "getactivewindow" {
+			return []byte("2748\n"), nil
+		}
 		return nil, nil
 	}
 	if err := SendGnome(run, false, domain.Target{WindowID: "0xabc"}, "hello"); err != nil {
 		t.Fatal(err)
 	}
-	if len(calls) != 2 {
+	if len(calls) != 5 {
 		t.Fatalf("%v", calls)
 	}
-	if !strings.Contains(calls[0], "--window 0xabc") || !strings.Contains(calls[1], "--window 0xabc") {
+	if calls[0] != "windowactivate --sync 0xabc" || calls[1] != "getactivewindow" {
 		t.Fatalf("%v", calls)
 	}
 	joined := strings.Join(calls, " ")
-	if strings.Contains(joined, "windowfocus") && !strings.Contains(joined, "--window") {
-		t.Fatal("must not type into focused window only")
+	if strings.Contains(joined, "type --clearmodifiers --window") {
+		t.Fatal("GNOME ignores SendEvent typing to its top-level window")
+	}
+	if !strings.Contains(joined, "type --clearmodifiers -- hello") || !strings.Contains(joined, "key --clearmodifiers Return") {
+		t.Fatalf("%v", calls)
+	}
+}
+
+func TestSendGnomeRefusesWhenActivatedWindowDoesNotMatch(t *testing.T) {
+	var calls []string
+	run := func(name string, args ...string) ([]byte, error) {
+		calls = append(calls, strings.Join(args, " "))
+		if len(args) > 0 && args[0] == "getactivewindow" {
+			return []byte("999\n"), nil
+		}
+		return nil, nil
+	}
+	err := SendGnome(run, false, domain.Target{WindowID: "0xabc"}, "hello")
+	if err == nil || !strings.Contains(err.Error(), "fenêtre active") {
+		t.Fatalf("err=%v", err)
+	}
+	if strings.Contains(strings.Join(calls, " "), "type") {
+		t.Fatalf("must not type after identity mismatch: %v", calls)
 	}
 }

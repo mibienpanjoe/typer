@@ -19,20 +19,27 @@ func Calendar(at time.Time) string {
 	return at.Format("2006-01-02 15:04:00")
 }
 
-func Start(run discover.Runner, unit, exe string, at time.Time, jobID string) error {
+func Start(run discover.Runner, unit, exe string, at time.Time, jobID string, environment ...string) error {
 	if run == nil {
 		run = discover.DefaultRunner
 	}
-	_, err := run(
-		"systemd-run",
+	args := []string{
 		"--user",
 		"--collect",
-		"--unit="+unit,
-		"--on-calendar="+Calendar(at),
+		"--unit=" + unit,
+		"--on-calendar=" + Calendar(at),
+		"--timer-property=AccuracySec=1s",
+		"--timer-property=RandomizedDelaySec=0",
+	}
+	for _, assignment := range environment {
+		args = append(args, "--setenv="+assignment)
+	}
+	args = append(args,
 		exe,
 		"fire",
 		jobID,
 	)
+	_, err := run("systemd-run", args...)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrSystemd, err)
 	}
