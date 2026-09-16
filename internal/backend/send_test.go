@@ -111,6 +111,32 @@ func TestSendGnomeTargetsWindow(t *testing.T) {
 	}
 }
 
+func TestSendGnomeSendsReturnEvenIfFocusFlickersAfterType(t *testing.T) {
+	var calls []string
+	nActive := 0
+	run := func(name string, args ...string) ([]byte, error) {
+		calls = append(calls, strings.Join(args, " "))
+		if len(args) > 0 && args[0] == "getactivewindow" {
+			nActive++
+			if nActive == 1 {
+				return []byte("2748\n"), nil
+			}
+			return []byte("999\n"), nil
+		}
+		return nil, nil
+	}
+	if err := SendGnome(run, false, domain.Target{WindowID: "0xabc"}, "hi"); err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(calls, " ")
+	if !strings.Contains(joined, "type --clearmodifiers -- hi") {
+		t.Fatalf("missing type: %v", calls)
+	}
+	if !strings.Contains(joined, "key --clearmodifiers Return") {
+		t.Fatalf("Enter skipped after type: %v", calls)
+	}
+}
+
 func TestSendGnomeRefusesWhenActivatedWindowDoesNotMatch(t *testing.T) {
 	var calls []string
 	run := func(name string, args ...string) ([]byte, error) {

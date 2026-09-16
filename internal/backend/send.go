@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/mibienpanjoe/typer/internal/discover"
 	"github.com/mibienpanjoe/typer/internal/domain"
@@ -53,8 +54,11 @@ func typeIntoWindow(run discover.Runner, windowID, message string) error {
 	if _, err := run("xdotool", "type", "--clearmodifiers", "--", message); err != nil {
 		return fmt.Errorf("xdotool type: %w — installez xdotool (écran déverrouillé)", err)
 	}
-	if err := requireActiveWindow(run, windowID); err != nil {
-		return fmt.Errorf("refus d'envoyer Entrée: %w", err)
+	time.Sleep(50 * time.Millisecond)
+	// Re-focus then always send Return. A TUI prompt that already received the
+	// text is useless without Enter; skipping it on a focus flicker was the GNOME bug.
+	if _, err := run("xdotool", "windowactivate", "--sync", windowID); err != nil {
+		return fmt.Errorf("xdotool windowactivate (avant Entrée) %s: %w", windowID, err)
 	}
 	if _, err := run("xdotool", "key", "--clearmodifiers", "Return"); err != nil {
 		return fmt.Errorf("xdotool key Return: %w", err)
