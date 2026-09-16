@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/typer-icon.png" width="168" alt="Typer">
+</p>
+
 # Typer
 
 CLI Linux one-shot : à une heure choisie, envoie un prompt + Entrée dans une fenêtre **Kitty** ou **GNOME Terminal** (Codex, Claude Code, …) quand les crédits reviennent.
