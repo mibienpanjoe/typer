@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 
 	"github.com/mattn/go-isatty"
 
@@ -40,39 +39,47 @@ func main() {
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
-	if wantsHelp(args) {
+	if len(args) == 1 && (args[0] == "-h" || args[0] == "--help") {
 		fmt.Fprint(stdout, usage)
 		return 0
 	}
 
 	d := deps(stdout, stderr)
-	cmd, rest := splitCommand(args)
-	switch cmd {
-	case "list":
+	if len(args) > 0 && args[0] == "list" {
+		if len(args) != 1 {
+			fmt.Fprintln(stderr, "Usage: typer list")
+			return app.ExitUser
+		}
 		return app.List(d)
-	case "cancel":
+	}
+	if len(args) > 0 && args[0] == "cancel" {
+		if len(args) > 2 {
+			fmt.Fprintln(stderr, "Usage: typer cancel [id]")
+			return app.ExitUser
+		}
 		id := ""
-		if len(rest) > 0 {
-			id = rest[0]
+		if len(args) == 2 {
+			id = args[1]
 		}
 		return app.Cancel(d, id)
-	case "fire":
-		id := ""
-		if len(rest) > 0 {
-			id = rest[0]
-		}
-		return app.Fire(d, id)
-	default:
-		at, msg, yes, extra, err := parseScheduleFlags(args, stderr)
-		if err != nil {
-			return app.ExitUser
-		}
-		if len(extra) > 0 {
-			fmt.Fprintf(stderr, "typer: commande inconnue %q\n", extra[0])
-			return app.ExitUser
-		}
-		return app.Schedule(d, at, msg, yes)
 	}
+	if len(args) > 0 && args[0] == "fire" {
+		if len(args) != 2 {
+			fmt.Fprintln(stderr, "Usage: typer fire <id>")
+			return app.ExitUser
+		}
+		return app.Fire(d, args[1])
+	}
+
+	at, msg, yes, extra, err := parseScheduleFlags(args, stderr)
+	if err != nil {
+		return app.ExitUser
+	}
+	if len(extra) > 0 {
+		fmt.Fprintf(stderr, "typer: commande inconnue %q\n", extra[0])
+		return app.ExitUser
+	}
+	return app.Schedule(d, at, msg, yes)
 }
 
 func deps(stdout, stderr io.Writer) app.Deps {
@@ -89,11 +96,18 @@ func deps(stdout, stderr io.Writer) app.Deps {
 		IsTTY: func() bool {
 			return isatty.IsTerminal(os.Stdin.Fd()) && isatty.IsTerminal(os.Stdout.Fd())
 		},
-		Form:    tui.RunForm,
-		Receipt: tui.Card,
-		Exe:     app.MustExe(),
-		Alive:   app.DefaultAlive,
-		Locked:  func() bool { return app.SessionLocked(nil) },
+		Form:     tui.RunForm,
+		Receipt:  tui.Card,
+		JobsView: tui.JobList,
+		Exe:      app.MustExe(),
+		Alive:    app.DefaultAlive,
+		Getenv:   os.Getenv,
+		PrepareGnome: func() (string, error) {
+			return discover.PrepareGnome(nil, os.Getenv, os.Getuid())
+		},
+		Locked: func(target domain.Target) (bool, error) {
+			return app.SessionLocked(nil, target)
+		},
 	}
 }
 
@@ -108,28 +122,4 @@ func parseScheduleFlags(args []string, stderr io.Writer) (at, msg string, yes bo
 		return "", "", false, nil, err
 	}
 	return *atp, *msgp, *yesp, fs.Args(), nil
-}
-
-func wantsHelp(args []string) bool {
-	for _, a := range args {
-		if a == "-h" || a == "--help" {
-			return true
-		}
-	}
-	return false
-}
-
-func splitCommand(args []string) (cmd string, rest []string) {
-	for i, a := range args {
-		if strings.HasPrefix(a, "-") {
-			continue
-		}
-		switch a {
-		case "list", "cancel", "fire":
-			return a, args[i+1:]
-		default:
-			return "", nil
-		}
-	}
-	return "", nil
 }

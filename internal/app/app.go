@@ -30,17 +30,20 @@ type FormResult struct {
 }
 
 type Deps struct {
-	Store   *store.Store
-	Now     func() time.Time
-	Runner  discover.Runner
-	Stdout  io.Writer
-	Stderr  io.Writer
-	IsTTY   func() bool
-	Form    func(targets []domain.Target, at, message string) (FormResult, error)
-	Receipt func(job domain.Job, warn string) string
-	Exe     string
-	Alive   func(int) bool
-	Locked  func() bool
+	Store        *store.Store
+	Now          func() time.Time
+	Runner       discover.Runner
+	Stdout       io.Writer
+	Stderr       io.Writer
+	IsTTY        func() bool
+	Form         func(targets []domain.Target, pending []domain.Job, at, message string) (FormResult, error)
+	Receipt      func(job domain.Job, warn string) string
+	JobsView     func(jobs []domain.Job) string
+	Exe          string
+	Alive        func(int) bool
+	Getenv       func(string) string
+	PrepareGnome func() (string, error)
+	Locked       func(domain.Target) (bool, error)
 }
 
 func (d Deps) now() time.Time {
@@ -58,26 +61,30 @@ func (d Deps) run() discover.Runner {
 }
 
 func Schedule(d Deps, atFlag, message string, yes bool) int {
-	if strings.TrimSpace(message) == "" {
-		message = domain.DefaultMessage
-	}
 	msg, err := domain.ValidateMessage(message)
 	if err != nil {
 		fmt.Fprintln(d.Stderr, err)
 		return ExitUser
 	}
 
-	targets, kittyErr := discover.All(d.run())
+	targets, kittyErr, gnomeErr := discover.All(d.run())
 	if len(targets) == 0 {
 		fmt.Fprintln(d.Stderr, "aucune fenêtre Kitty ou GNOME Terminal.")
-		fmt.Fprintln(d.Stderr, "Typer tourne dans un autre terminal : kitty @ ls ne voit Kitty que via un socket.")
 		if kittyErr != nil {
 			fmt.Fprintf(d.Stderr, "Kitty: %v\n", kittyErr)
-			fmt.Fprintln(d.Stderr, "Pour le remote control, dans kitty.conf puis redémarrer Kitty :")
+			fmt.Fprintln(d.Stderr, "Dans kitty.conf, puis redémarrez Kitty :")
 			fmt.Fprintln(d.Stderr, "  allow_remote_control socket-only")
 			fmt.Fprintln(d.Stderr, "  listen_on unix:${XDG_RUNTIME_DIR}/kitty")
-			fmt.Fprintln(d.Stderr, "Sinon installez xdotool (déjà utilisé en secours si des fenêtres Kitty sont visibles).")
 		}
+		if gnomeErr != nil {
+			fmt.Fprintf(d.Stderr, "GNOME: %v\n", gnomeErr)
+			fmt.Fprintln(d.Stderr, "Installez wmctrl et xdotool, puis utilisez une session X11.")
+		}
+		return ExitUser
+	}
+	pending, err := d.Store.ListJobs()
+	if err != nil {
+		fmt.Fprintln(d.Stderr, err)
 		return ExitUser
 	}
 
@@ -103,7 +110,7 @@ func Schedule(d Deps, atFlag, message string, yes bool) int {
 			fmt.Fprintln(d.Stderr, "formulaire indisponible")
 			return ExitUser
 		}
-		res, err := d.Form(targets, atStr, msg)
+		res, err := d.Form(targets, pending, atStr, msg)
 		if err != nil {
 			fmt.Fprintln(d.Stderr, err)
 			return ExitUser
@@ -116,13 +123,10 @@ func Schedule(d Deps, atFlag, message string, yes bool) int {
 		if res.At != "" {
 			atStr = res.At
 		}
-		if res.Message != "" {
-			msg = res.Message
-			msg, err = domain.ValidateMessage(msg)
-			if err != nil {
-				fmt.Fprintln(d.Stderr, err)
-				return ExitUser
-			}
+		msg, err = domain.ValidateMessage(res.Message)
+		if err != nil {
+			fmt.Fprintln(d.Stderr, err)
+			return ExitUser
 		}
 	}
 
@@ -139,17 +143,22 @@ func Schedule(d Deps, atFlag, message string, yes bool) int {
 	backendName := domain.BackendKitty
 	if target.Emulator == domain.EmulatorGnome {
 		backendName = domain.BackendGnome
+		if d.PrepareGnome == nil {
+			fmt.Fprintln(d.Stderr, "GNOME Terminal: vérification du backend indisponible")
+			return ExitUser
+		}
+		sessionID, err := d.PrepareGnome()
+		if err != nil {
+			fmt.Fprintln(d.Stderr, err)
+			return ExitUser
+		}
+		target.SessionID = &sessionID
 	}
-	if target.Emulator == domain.EmulatorKitty && kittyErr != nil && target.KittyID == nil && target.WindowID == "" {
-		fmt.Fprintf(d.Stderr, "Kitty remote control indisponible. Activez allow_remote_control (socket-only) dans kitty.conf.\n")
+	if target.Emulator == domain.EmulatorKitty && (target.KittyID == nil || target.ListenOn == nil || !strings.HasPrefix(*target.ListenOn, "unix:")) {
+		fmt.Fprintln(d.Stderr, "Kitty remote control indisponible. Configurez allow_remote_control socket-only et listen_on unix:${XDG_RUNTIME_DIR}/kitty.")
 		return ExitUser
 	}
 
-	pending, err := d.Store.ListJobs()
-	if err != nil {
-		fmt.Fprintln(d.Stderr, err)
-		return ExitUser
-	}
 	if schedule.Conflict(pending, target) {
 		fmt.Fprintln(d.Stderr, "un job existe déjà pour cette fenêtre. typer cancel d'abord.")
 		return ExitUser
@@ -169,7 +178,15 @@ func Schedule(d Deps, atFlag, message string, yes bool) int {
 		fmt.Fprintln(d.Stderr, err)
 		return ExitUser
 	}
-	if err := schedule.Start(d.run(), job.SystemdUnit, d.Exe, when, id); err != nil {
+	environment := []string{"TYPER_STATE=" + d.Store.Root}
+	if backendName == domain.BackendGnome && d.Getenv != nil {
+		for _, key := range []string{"DISPLAY", "XAUTHORITY", "XDG_SESSION_TYPE", "PATH"} {
+			if value := d.Getenv(key); value != "" {
+				environment = append(environment, key+"="+value)
+			}
+		}
+	}
+	if err := schedule.Start(d.run(), job.SystemdUnit, d.Exe, when, id, environment...); err != nil {
 		_ = d.Store.DeleteJob(id)
 		fmt.Fprintln(d.Stderr, err)
 		fmt.Fprintln(d.Stderr, "systemd --user est requis (Pop!_OS / GNOME).")
@@ -213,6 +230,10 @@ func List(d Deps) int {
 		fmt.Fprintln(d.Stdout, "aucun job en attente")
 		return ExitOK
 	}
+	if d.JobsView != nil {
+		fmt.Fprintln(d.Stdout, d.JobsView(jobs))
+		return ExitOK
+	}
 	for _, j := range jobs {
 		msg := j.Message
 		if len(msg) > 40 {
@@ -246,9 +267,14 @@ func Cancel(d Deps, id string) int {
 		fmt.Fprintln(d.Stderr, "job introuvable")
 		return ExitUser
 	}
-	_ = schedule.Stop(d.run(), job.SystemdUnit)
+	stopErr := schedule.Stop(d.run(), job.SystemdUnit)
 	if err := d.Store.DeleteJob(id); err != nil {
 		fmt.Fprintln(d.Stderr, err)
+		return ExitUser
+	}
+	if stopErr != nil {
+		fmt.Fprintf(d.Stderr, "job supprimé, mais l'unité systemd n'a pas pu être arrêtée: %v\n", stopErr)
+		fmt.Fprintln(d.Stderr, "Le job absent empêchera tout envoi si l'unité se déclenche.")
 		return ExitUser
 	}
 	fmt.Fprintf(d.Stdout, "job %s annulé\n", id)
@@ -265,11 +291,7 @@ func Fire(d Deps, id string) int {
 		case domain.BackendKitty:
 			return backend.SendKitty(d.run(), job.Target, job.Message)
 		case domain.BackendGnome:
-			locked := false
-			if d.Locked != nil {
-				locked = d.Locked()
-			}
-			return backend.SendGnome(d.run(), locked, job.Target, job.Message)
+			return backend.SendGnome(d.run(), false, job.Target, job.Message)
 		default:
 			return fmt.Errorf("backend inconnu %s", job.Backend)
 		}
@@ -278,9 +300,8 @@ func Fire(d Deps, id string) int {
 		Store: d.Store,
 		Now:   d.now,
 		Alive: d.Alive,
-		List: func() ([]domain.Target, error) {
-			t, _ := discover.All(d.run())
-			return t, nil
+		List: func(target domain.Target) ([]domain.Target, error) {
+			return discover.ListTarget(d.run(), target)
 		},
 		Locked: d.Locked,
 		Send:   send,
@@ -298,15 +319,12 @@ func Fire(d Deps, id string) int {
 	return ExitFire
 }
 
-func SessionLocked(run discover.Runner) bool {
-	if run == nil {
-		run = discover.DefaultRunner
+func SessionLocked(run discover.Runner, target domain.Target) (bool, error) {
+	sessionID := ""
+	if target.SessionID != nil {
+		sessionID = *target.SessionID
 	}
-	out, err := run("loginctl", "show-session", "self", "-p", "LockedHint")
-	if err != nil {
-		return false
-	}
-	return strings.Contains(string(out), "LockedHint=yes")
+	return discover.SessionLocked(run, sessionID)
 }
 
 func DefaultAlive(pid int) bool {

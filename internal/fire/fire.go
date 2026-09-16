@@ -7,6 +7,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"github.com/mibienpanjoe/typer/internal/backend"
 	"github.com/mibienpanjoe/typer/internal/domain"
@@ -20,6 +21,8 @@ var (
 
 // MatchTitle: égalité, ou l'un est préfixe de l'autre (le titre Codex change souvent de suffixe).
 func MatchTitle(snapshot, live string) bool {
+	snapshot = stableTitle(snapshot)
+	live = stableTitle(live)
 	if snapshot == live {
 		return true
 	}
@@ -27,6 +30,15 @@ func MatchTitle(snapshot, live string) bool {
 		return false
 	}
 	return strings.HasPrefix(live, snapshot) || strings.HasPrefix(snapshot, live)
+}
+
+func stableTitle(title string) string {
+	title = strings.TrimSpace(title)
+	r, size := utf8.DecodeRuneInString(title)
+	if r >= '\u2800' && r <= '\u28ff' {
+		return strings.TrimSpace(title[size:])
+	}
+	return title
 }
 
 func Revalidate(snap domain.Target, live []domain.Target, alive, gnomeLocked bool) error {
@@ -59,8 +71,8 @@ type Deps struct {
 	Store  *store.Store
 	Now    func() time.Time
 	Alive  func(pid int) bool
-	List   func() ([]domain.Target, error)
-	Locked func() bool
+	List   func(domain.Target) ([]domain.Target, error)
+	Locked func(domain.Target) (bool, error)
 	Send   func(job domain.Job) error
 	Stop   func(unit string) error
 }
@@ -103,44 +115,59 @@ func Run(d Deps, jobID string) (logResult string, err error) {
 		return "", err
 	}
 
-	cleanup := func() {
-		_ = d.Store.DeleteJob(jobID)
-		if d.Stop != nil && job.SystemdUnit != "" {
-			_ = d.Stop(job.SystemdUnit)
+	finish := func(result string, cause error) (string, error) {
+		var errs []error
+		if cause != nil {
+			errs = append(errs, cause)
 		}
+		if err := d.Store.AppendLog(store.LogEntry{ID: jobID, Timestamp: d.Now(), Result: result, Backend: job.Backend}); err != nil {
+			errs = append(errs, fmt.Errorf("journal: %w", err))
+		}
+		if err := d.Store.DeleteJob(jobID); err != nil {
+			errs = append(errs, fmt.Errorf("suppression du job: %w", err))
+		}
+		if d.Stop != nil && job.SystemdUnit != "" {
+			if err := d.Stop(job.SystemdUnit); err != nil {
+				errs = append(errs, fmt.Errorf("nettoyage de l'unité systemd: %w", err))
+			}
+		}
+		return result, errors.Join(errs...)
 	}
 
-	live, err := d.List()
+	live, err := d.List(job.Target)
 	if err != nil {
-		live = nil
+		return finish(store.ResultAbortedBackend, fmt.Errorf("redécouverte de la cible: %w", err))
 	}
 	alive := true
 	if d.Alive != nil {
 		alive = d.Alive(job.Target.PID)
 	}
 	locked := false
-	if d.Locked != nil {
-		locked = d.Locked()
+	if job.Target.Emulator == domain.EmulatorGnome {
+		if d.Locked == nil {
+			res := store.ResultAbortedBackend
+			err := fmt.Errorf("état de verrouillage GNOME inconnu")
+			return finish(res, err)
+		}
+		locked, err = d.Locked(job.Target)
+		if err != nil {
+			res := store.ResultAbortedBackend
+			return finish(res, err)
+		}
 	}
 	if err := Revalidate(job.Target, live, alive, locked); err != nil {
 		res := store.ResultAbortedMissingTarget
 		if errors.Is(err, backend.ErrLocked) {
 			res = store.ResultAbortedLocked
 		}
-		_ = d.Store.AppendLog(store.LogEntry{ID: jobID, Timestamp: d.Now(), Result: res, Backend: job.Backend})
-		cleanup()
-		return res, err
+		return finish(res, err)
 	}
 	if err := d.Send(job); err != nil {
 		res := store.ResultAbortedBackend
 		if errors.Is(err, backend.ErrLocked) {
 			res = store.ResultAbortedLocked
 		}
-		_ = d.Store.AppendLog(store.LogEntry{ID: jobID, Timestamp: d.Now(), Result: res, Backend: job.Backend})
-		cleanup()
-		return res, err
+		return finish(res, err)
 	}
-	_ = d.Store.AppendLog(store.LogEntry{ID: jobID, Timestamp: d.Now(), Result: store.ResultSent, Backend: job.Backend})
-	cleanup()
-	return store.ResultSent, nil
+	return finish(store.ResultSent, nil)
 }

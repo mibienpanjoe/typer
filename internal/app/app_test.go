@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -130,6 +131,29 @@ func TestCancelRemovesJob(t *testing.T) {
 	}
 }
 
+func TestCancelReportsSystemdStopFailureButDeletesJob(t *testing.T) {
+	s := store.New(t.TempDir())
+	job := domain.Job{ID: "abc", SystemdUnit: "typer-job-abc"}
+	if err := s.SaveJob(job); err != nil {
+		t.Fatal(err)
+	}
+	var stderr bytes.Buffer
+	code := Cancel(Deps{
+		Store: s,
+		Runner: func(string, ...string) ([]byte, error) {
+			return nil, errors.New("systemd unavailable")
+		},
+		Stdout: ioDiscard{},
+		Stderr: &stderr,
+	}, job.ID)
+	if code != ExitUser || !strings.Contains(stderr.String(), "unité systemd") {
+		t.Fatalf("code=%d stderr=%s", code, stderr.String())
+	}
+	if _, err := s.LoadJob(job.ID); err == nil {
+		t.Fatal("job must be removed so a stale timer cannot inject")
+	}
+}
+
 func TestScheduleInvalidHour(t *testing.T) {
 	var errb bytes.Buffer
 	s := store.New(t.TempDir())
@@ -144,6 +168,76 @@ func TestScheduleInvalidHour(t *testing.T) {
 	}, "25:00", "continue", true)
 	if code != ExitUser {
 		t.Fatalf("code %d %s", code, errb.String())
+	}
+}
+
+func TestScheduleGnomeSnapshotsGraphicalSession(t *testing.T) {
+	t.Setenv("KITTY_LISTEN_ON", "unix:/tmp/typer-test-kitty")
+	s := store.New(t.TempDir())
+	var systemdArgs string
+	run := func(name string, args ...string) ([]byte, error) {
+		switch name {
+		case "kitty":
+			return nil, errors.New("remote unavailable")
+		case "wmctrl":
+			return []byte("0x02a00001  0 21501  gnome-terminal-server.Gnome-terminal  pop-os  Codex · typer\n"), nil
+		case "systemd-run":
+			systemdArgs = strings.Join(args, " ")
+			return nil, nil
+		default:
+			return nil, errors.New("unexpected command")
+		}
+	}
+	code := Schedule(Deps{
+		Store: s,
+		Now: func() time.Time {
+			return time.Date(2026, 9, 15, 3, 0, 0, 0, time.Local)
+		},
+		Runner: run, Stdout: ioDiscard{}, Stderr: ioDiscard{},
+		IsTTY: func() bool { return false }, Exe: "/usr/bin/typer",
+		Getenv: func(key string) string {
+			return map[string]string{"DISPLAY": ":1", "XAUTHORITY": "/tmp/xauth", "XDG_SESSION_TYPE": "x11", "PATH": "/home/mj/.local/bin:/usr/bin"}[key]
+		},
+		PrepareGnome: func() (string, error) { return "3", nil },
+	}, "06:34", "continue", true)
+	if code != ExitOK {
+		t.Fatalf("code %d", code)
+	}
+	jobs, err := s.ListJobs()
+	if err != nil || len(jobs) != 1 {
+		t.Fatalf("jobs=%v err=%v", jobs, err)
+	}
+	if jobs[0].Target.SessionID == nil || *jobs[0].Target.SessionID != "3" {
+		t.Fatalf("session %+v", jobs[0].Target.SessionID)
+	}
+	for _, want := range []string{"--setenv=TYPER_STATE=" + s.Root, "--setenv=DISPLAY=:1", "--setenv=XAUTHORITY=/tmp/xauth", "--setenv=XDG_SESSION_TYPE=x11", "--setenv=PATH=/home/mj/.local/bin:/usr/bin"} {
+		if !strings.Contains(systemdArgs, want) {
+			t.Fatalf("systemd args missing %q: %s", want, systemdArgs)
+		}
+	}
+}
+
+func TestScheduleGnomeRefusesUnavailableBackend(t *testing.T) {
+	t.Setenv("KITTY_LISTEN_ON", "unix:/tmp/typer-test-kitty")
+	s := store.New(t.TempDir())
+	run := func(name string, args ...string) ([]byte, error) {
+		if name == "wmctrl" {
+			return []byte("0x02a00001  0 21501  gnome-terminal-server.Gnome-terminal  pop-os  Codex · typer\n"), nil
+		}
+		return nil, errors.New("unavailable")
+	}
+	var stderr bytes.Buffer
+	code := Schedule(Deps{
+		Store: s, Runner: run, Stdout: ioDiscard{}, Stderr: &stderr,
+		IsTTY: func() bool { return false }, Exe: "/usr/bin/typer",
+		PrepareGnome: func() (string, error) { return "", errors.New("xdotool indisponible") },
+	}, "06:34", "continue", true)
+	if code != ExitUser || !strings.Contains(stderr.String(), "xdotool") {
+		t.Fatalf("code=%d stderr=%s", code, stderr.String())
+	}
+	jobs, err := s.ListJobs()
+	if err != nil || len(jobs) != 0 {
+		t.Fatalf("jobs=%v err=%v", jobs, err)
 	}
 }
 

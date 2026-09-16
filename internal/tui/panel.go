@@ -46,6 +46,31 @@ func Panel(selected *domain.Target, pending []domain.Job, width int) string {
 	return w.Render()
 }
 
+func JobList(jobs []domain.Job) string {
+	if len(jobs) == 0 {
+		return ""
+	}
+	ordered := append([]domain.Job(nil), jobs...)
+	sort.Slice(ordered, func(i, j int) bool { return ordered[i].At.Before(ordered[j].At) })
+	w := table.NewWriter()
+	style := table.StyleRounded
+	style.Format.Header = text.FormatDefault
+	style.Options.SeparateRows = false
+	w.SetStyle(style)
+	w.SetTitle("Jobs en attente")
+	w.AppendHeader(table.Row{"ID", "Date", "Backend", "Cible", "Message"})
+	for _, job := range ordered {
+		w.AppendRow(table.Row{
+			job.ID,
+			job.At.Format("02/01 15:04"),
+			job.Backend,
+			discover.Label(job.Target),
+			text.Snip(strings.TrimSpace(job.Message), 40, "…"),
+		})
+	}
+	return w.Render()
+}
+
 func clipMsg(msg string) string {
 	msg = strings.TrimSpace(msg)
 	if msg == "" {

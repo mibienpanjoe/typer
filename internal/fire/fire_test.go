@@ -40,6 +40,12 @@ func TestMatchTitlePrefix(t *testing.T) {
 	}
 }
 
+func TestMatchTitleIgnoresLeadingBrailleSpinner(t *testing.T) {
+	if !MatchTitle("⠧ Analyser et améliorer", "⠙ Analyser et améliorer") {
+		t.Fatal("spinner frame should not change target identity")
+	}
+}
+
 func TestRevalidateMissingDoesNotNeedSend(t *testing.T) {
 	err := Revalidate(sample("x").Target, nil, true, false)
 	if !errors.Is(err, ErrMissingTarget) {
@@ -60,7 +66,7 @@ func TestRunMissingTargetDoesNotSend(t *testing.T) {
 		Store: s,
 		Now:   time.Now,
 		Alive: func(int) bool { return true },
-		List:  func() ([]domain.Target, error) { return nil, nil },
+		List:  func(domain.Target) ([]domain.Target, error) { return nil, nil },
 		Send: func(domain.Job) error {
 			sent++
 			return nil
@@ -101,7 +107,7 @@ func TestRunSuccessDeletesJob(t *testing.T) {
 		Store: s,
 		Now:   time.Now,
 		Alive: func(int) bool { return true },
-		List:  func() ([]domain.Target, error) { return []domain.Target{job.Target}, nil },
+		List:  func(domain.Target) ([]domain.Target, error) { return []domain.Target{job.Target}, nil },
 		Send:  func(domain.Job) error { return nil },
 		Stop:  func(string) error { return nil },
 	}, "ok")
@@ -155,7 +161,7 @@ func TestRunDeadPID(t *testing.T) {
 		Store: s,
 		Now:   time.Now,
 		Alive: func(int) bool { return false },
-		List:  func() ([]domain.Target, error) { return []domain.Target{job.Target}, nil },
+		List:  func(domain.Target) ([]domain.Target, error) { return []domain.Target{job.Target}, nil },
 		Send: func(domain.Job) error {
 			sent++
 			return nil
@@ -167,6 +173,27 @@ func TestRunDeadPID(t *testing.T) {
 	}
 	if sent != 0 {
 		t.Fatal("send")
+	}
+}
+
+func TestRunReportsDiscoveryFailureAsBackendAbort(t *testing.T) {
+	s := store.New(t.TempDir())
+	job := sample("discover-failure")
+	if err := s.SaveJob(job); err != nil {
+		t.Fatal(err)
+	}
+	res, err := Run(Deps{
+		Store: s,
+		Now:   time.Now,
+		Alive: func(int) bool { return true },
+		List: func(domain.Target) ([]domain.Target, error) {
+			return nil, errors.New("remote socket unavailable")
+		},
+		Send: func(domain.Job) error { t.Fatal("send must not run"); return nil },
+		Stop: func(string) error { return nil },
+	}, job.ID)
+	if err == nil || res != store.ResultAbortedBackend {
+		t.Fatalf("result=%q err=%v", res, err)
 	}
 }
 
@@ -185,8 +212,8 @@ func TestRunGnomeLocked(t *testing.T) {
 		Store:  s,
 		Now:    time.Now,
 		Alive:  func(int) bool { return true },
-		Locked: func() bool { return true },
-		List:   func() ([]domain.Target, error) { return []domain.Target{job.Target}, nil },
+		Locked: func(domain.Target) (bool, error) { return true, nil },
+		List:   func(domain.Target) ([]domain.Target, error) { return []domain.Target{job.Target}, nil },
 		Send: func(domain.Job) error {
 			sent++
 			return nil
@@ -201,3 +228,94 @@ func TestRunGnomeLocked(t *testing.T) {
 	}
 }
 
+func TestRunGnomeUnknownLockStateFailsClosed(t *testing.T) {
+	s := store.New(t.TempDir())
+	job := sample("unknown-lock")
+	job.Backend = domain.BackendGnome
+	job.Target.Emulator = domain.EmulatorGnome
+	job.Target.KittyID = nil
+	job.Target.WindowID = "0xabc"
+	if err := s.SaveJob(job); err != nil {
+		t.Fatal(err)
+	}
+	sent := 0
+	res, err := Run(Deps{
+		Store: s,
+		Now:   time.Now,
+		Alive: func(int) bool { return true },
+		Locked: func(domain.Target) (bool, error) {
+			return false, errors.New("lock state unavailable")
+		},
+		List: func(domain.Target) ([]domain.Target, error) { return []domain.Target{job.Target}, nil },
+		Send: func(domain.Job) error {
+			sent++
+			return nil
+		},
+		Stop: func(string) error { return nil },
+	}, job.ID)
+	if err == nil {
+		t.Fatal("unknown lock state must abort")
+	}
+	if res != store.ResultAbortedBackend {
+		t.Fatalf("result %q", res)
+	}
+	if sent != 0 {
+		t.Fatal("send must not run")
+	}
+	if _, err := s.LoadJob(job.ID); err == nil {
+		t.Fatal("job should be cleaned up")
+	}
+}
+
+func TestRunReportsLogFailureAfterSend(t *testing.T) {
+	s := store.New(t.TempDir())
+	job := sample("log-failure")
+	if err := s.SaveJob(job); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(s.LogPath(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	res, err := Run(Deps{
+		Store: s,
+		Now:   time.Now,
+		Alive: func(int) bool { return true },
+		List:  func(domain.Target) ([]domain.Target, error) { return []domain.Target{job.Target}, nil },
+		Send:  func(domain.Job) error { return nil },
+		Stop:  func(string) error { return nil },
+	}, job.ID)
+	if res != store.ResultSent {
+		t.Fatalf("result %q", res)
+	}
+	if err == nil || !strings.Contains(err.Error(), "journal") {
+		t.Fatalf("err=%v", err)
+	}
+	if _, err := s.LoadJob(job.ID); err == nil {
+		t.Fatal("job should still be deleted")
+	}
+}
+
+func TestRunReportsSystemdCleanupFailure(t *testing.T) {
+	s := store.New(t.TempDir())
+	job := sample("stop-failure")
+	if err := s.SaveJob(job); err != nil {
+		t.Fatal(err)
+	}
+	res, err := Run(Deps{
+		Store: s,
+		Now:   time.Now,
+		Alive: func(int) bool { return true },
+		List:  func(domain.Target) ([]domain.Target, error) { return []domain.Target{job.Target}, nil },
+		Send:  func(domain.Job) error { return nil },
+		Stop:  func(string) error { return errors.New("systemd unavailable") },
+	}, job.ID)
+	if res != store.ResultSent {
+		t.Fatalf("result %q", res)
+	}
+	if err == nil || !strings.Contains(err.Error(), "unité systemd") {
+		t.Fatalf("err=%v", err)
+	}
+	if _, err := s.LoadJob(job.ID); err == nil {
+		t.Fatal("job should still be deleted")
+	}
+}

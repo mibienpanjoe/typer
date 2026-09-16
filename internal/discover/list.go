@@ -1,11 +1,33 @@
 package discover
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 
 	"github.com/mibienpanjoe/typer/internal/domain"
 )
+
+func ListTarget(run Runner, target domain.Target) ([]domain.Target, error) {
+	if run == nil {
+		run = DefaultRunner
+	}
+	switch target.Emulator {
+	case domain.EmulatorKitty:
+		if target.ListenOn == nil || !strings.HasPrefix(*target.ListenOn, "unix:") {
+			return nil, fmt.Errorf("%w: socket Unix absent", ErrRemoteControl)
+		}
+		out, err := run("kitty", "@", "--to", *target.ListenOn, "ls")
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrRemoteControl, err)
+		}
+		return parseKittyLS(out, *target.ListenOn)
+	case domain.EmulatorGnome:
+		return ListGnome(run)
+	default:
+		return nil, fmt.Errorf("émulateur inconnu %q", target.Emulator)
+	}
+}
 
 func Label(t domain.Target) string {
 	emu := "Kitty"
@@ -16,10 +38,14 @@ func Label(t domain.Target) string {
 	if title == "" {
 		title = t.WindowID
 	}
+	label := emu + " · " + title
 	if t.CWD != nil && *t.CWD != "" {
-		return emu + " · " + title + " · " + filepath.Base(*t.CWD)
+		label += " · " + filepath.Base(*t.CWD)
 	}
-	return emu + " · " + title
+	if t.Emulator == domain.EmulatorGnome && t.WindowID != "" {
+		label += " · fenêtre " + t.WindowID
+	}
+	return label
 }
 
 func cleanTitle(title string) string {
@@ -88,7 +114,7 @@ func IsAmbiguous(err error) bool {
 	return ok
 }
 
-func All(run Runner) (targets []domain.Target, kittyErr error) {
+func All(run Runner) (targets []domain.Target, kittyErr, gnomeErr error) {
 	if run == nil {
 		run = DefaultRunner
 	}
@@ -99,8 +125,10 @@ func All(run Runner) (targets []domain.Target, kittyErr error) {
 		targets = append(targets, kitty...)
 	}
 	gnome, gErr := ListGnome(run)
-	if gErr == nil {
+	if gErr != nil {
+		gnomeErr = gErr
+	} else {
 		targets = append(targets, gnome...)
 	}
-	return targets, kittyErr
+	return targets, kittyErr, gnomeErr
 }

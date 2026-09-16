@@ -118,9 +118,12 @@ func TestAllMergesKittyAndGnome(t *testing.T) {
 			return nil, nil
 		}
 	}
-	got, kErr := All(run)
+	got, kErr, gErr := All(run)
 	if kErr != nil {
 		t.Fatal(kErr)
+	}
+	if gErr != nil {
+		t.Fatal(gErr)
 	}
 	if len(got) != 2 {
 		t.Fatalf("len %d", len(got))
