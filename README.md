@@ -4,12 +4,28 @@ CLI Linux one-shot : à une heure choisie, envoie un prompt + Entrée dans une f
 
 Pas de daemon. Cible explicite. Formulaire TUI [Charm Huh](https://github.com/charmbracelet/huh).
 
-## Build
+## Install
+
+Place `typer` dans `~/.local/bin` (déjà dans le PATH sur Pop!_OS) :
 
 ```bash
 export PATH=/usr/local/go/bin:$PATH   # si go n'est pas dans le PATH
+make install
+```
+
+Ensuite, depuis n’importe quel terminal : `typer`, `typer list`, `typer cancel`.
+
+`make uninstall` retire le binaire. `PREFIX` / `BINDIR` si tu veux un autre préfixe (`make install PREFIX=/usr/local`).
+
+Les jobs déjà programmés gardent le chemin du binaire d’alors : `typer cancel` puis reprogrammer après un déplacement.
+
+## Build (sans installer)
+
+```bash
+export PATH=/usr/local/go/bin:$PATH
 go test ./...
 go build -o typer ./cmd/typer
+./typer
 ```
 
 Kitty : remote control via socket Unix obligatoire. Dans `kitty.conf` :
@@ -26,10 +42,10 @@ sudo apt install wmctrl xdotool
 ```
 
 ```bash
-./typer --at 06:34 -m continue --yes   # une seule fenêtre agent
-./typer                                # formulaire TUI
-./typer list
-./typer cancel
+typer --at 06:34 -m continue --yes   # une seule fenêtre agent
+typer                                # formulaire TUI
+typer list
+typer cancel
 ```
 
 `TYPER_STATE` : répertoire des jobs (défaut `$XDG_STATE_HOME/typer`).
