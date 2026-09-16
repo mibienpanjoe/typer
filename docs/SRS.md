@@ -160,6 +160,7 @@ Schéma job (champs requis) :
     "pid": 0,
     "window_id": "string",
     "kitty_id": "string | null",
+    "session_id": "string | null",
     "tty": "string | null",
     "title": "string",
     "cwd": "string | null"
@@ -176,7 +177,7 @@ Le message est une donnée sensible (peut coller un secret par erreur). Pas de c
 |---|---|---|
 | `systemd-run --user` | Calendar one-shot → `typer fire <id>` | Unité `typer-job-<id>.service` ; se retire après |
 | Kitty remote control | `send-text` + newline vers la fenêtre matchée | Socket local ; pas TCP |
-| Fenêtre GNOME (X11) | Envoi de keysyms **à cette fenêtre** | Pas de fallback « fenêtre focus » si la cible a disparu |
+| Fenêtre GNOME (X11) | Active la fenêtre snapshot, vérifie son id actif, puis envoie les keysyms | Pas de fallback vers une autre fenêtre ; revérification avant Entrée |
 | `notify-send` | P3 seulement | Absence = pas d’échec du job |
 
 Typer n’ouvre **aucune** socket réseau, n’appelle aucun HTTP.
@@ -193,7 +194,7 @@ Typer n’ouvre **aucune** socket réseau, n’appelle aucun HTTP.
 
 **FR-03** S’il n’y a qu’une cible plausible (heuristique titre/processus agent, à figer en revue UX), Typer la propose et demande confirmation. S’il y en a plusieurs, liste numérotée, choix obligatoire.
 
-**FR-04** À la programmation, Typer **fige** les identifiants de cible (pid, window id, kitty id si applicable, titre, tty). Ce snapshot est la seule cible autorisée à H.
+**FR-04** À la programmation, Typer **fige** les identifiants de cible (pid, window id, kitty id ou session graphique si applicable, titre, tty). Ce snapshot est la seule cible autorisée à H.
 
 ### Programmation
 

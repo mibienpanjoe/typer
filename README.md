@@ -12,9 +12,18 @@ go test ./...
 go build -o typer ./cmd/typer
 ```
 
-Kitty : `allow_remote_control socket-only` (ou `yes`) dans `kitty.conf`.
+Kitty : remote control via socket Unix obligatoire. Dans `kitty.conf` :
 
-GNOME Terminal : `wmctrl` + `xdotool`, session **déverrouillée** (X11).
+```conf
+allow_remote_control socket-only
+listen_on unix:${XDG_RUNTIME_DIR}/kitty
+```
+
+GNOME Terminal : `wmctrl` + `xdotool`, session **X11 déverrouillée**. Garder l’onglet agent actif dans la fenêtre ciblée ; Typer refuse l’envoi si l’état de verrouillage est inconnu.
+
+```bash
+sudo apt install wmctrl xdotool
+```
 
 ```bash
 ./typer --at 06:34 -m continue --yes   # une seule fenêtre agent
