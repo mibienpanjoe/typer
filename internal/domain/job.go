@@ -14,7 +14,7 @@ var clockPattern = regexp.MustCompile(`^(\d{2}):(\d{2})$`)
 
 const (
 	DefaultMessage   = "continue"
-	DefaultSubmitKey = "ctrl+j"
+	DefaultSubmitKey = "enter"
 	MaxMessageBytes  = 4096
 	BackendKitty     = "kitty"
 	BackendGnome     = "gnome"

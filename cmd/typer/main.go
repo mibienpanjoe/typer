@@ -29,7 +29,7 @@ Flags:
   -h, --help        Aide
 
 Env:
-  TYPER_SUBMIT_KEY  Touche finale: ctrl+j (défaut) ou enter
+  TYPER_SUBMIT_KEY  Touche finale: enter (défaut) ou ctrl+j
 
 Commandes:
   list              Jobs en attente

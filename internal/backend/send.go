@@ -63,10 +63,10 @@ func typeIntoWindow(run discover.Runner, windowID, message, submitKey string) er
 		return fmt.Errorf("xdotool type: %w — installez xdotool (écran déverrouillé)", err)
 	}
 	time.Sleep(50 * time.Millisecond)
-	// Re-focus then always send Return. A TUI prompt that already received the
-	// text is useless without Enter; skipping it on a focus flicker was the GNOME bug.
+	// Re-focus before sending the configured submission key. Skipping it after
+	// typing leaves the message in the composer without starting the agent.
 	if _, err := run("xdotool", "windowactivate", "--sync", windowID); err != nil {
-		return fmt.Errorf("xdotool windowactivate (avant Entrée) %s: %w", windowID, err)
+		return fmt.Errorf("xdotool windowactivate (avant soumission) %s: %w", windowID, err)
 	}
 	if _, err := run("xdotool", "key", "--clearmodifiers", submitKey); err != nil {
 		return fmt.Errorf("xdotool key %s: %w", submitKey, err)

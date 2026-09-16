@@ -130,7 +130,7 @@ Variable d'environnement :
 
 | Variable | Sémantique |
 |---|---|
-| `TYPER_SUBMIT_KEY` | Touche de soumission capturée dans le job. Valeurs : `ctrl+j` (défaut, robuste pour Codex) ou `enter`. |
+| `TYPER_SUBMIT_KEY` | Touche de soumission capturée dans le job. Valeurs : `enter` (défaut) ou `ctrl+j` (uniquement si l’agent cible utilise cette touche pour soumettre). |
 
 Hors v1 (réservés, ne pas implémenter sans mise à jour SRS) : `--dry-run`, `--at` ISO datetime, ciblage par PID en flag.
 

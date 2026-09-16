@@ -48,10 +48,10 @@ typer --at 06:34 -m continue
 typer --at 06:34 -m continue --yes   # one unambiguous target
 ```
 
-By default Typer submits with `ctrl+j`, which avoids Codex composer modes where plain Enter inserts a new line. If your agent expects a regular Enter key, schedule with:
+Typer submits with Enter by default, as expected by Codex, Claude Code, and Cursor Agent. If you have explicitly mapped submission to Ctrl+J in another agent, you can override the key when scheduling:
 
 ```bash
-TYPER_SUBMIT_KEY=enter typer
+TYPER_SUBMIT_KEY=ctrl+j typer
 ```
 
 ## Commands

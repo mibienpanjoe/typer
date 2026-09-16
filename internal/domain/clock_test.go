@@ -84,12 +84,12 @@ func TestValidateMessageAcceptsMaxLength(t *testing.T) {
 	}
 }
 
-func TestNormalizeSubmitKeyDefaultsToCtrlJ(t *testing.T) {
+func TestNormalizeSubmitKeyDefaultsToEnter(t *testing.T) {
 	got, err := NormalizeSubmitKey("")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != "ctrl+j" {
+	if got != "enter" {
 		t.Fatalf("got %q", got)
 	}
 }

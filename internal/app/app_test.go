@@ -60,7 +60,7 @@ func TestScheduleYesOneTarget(t *testing.T) {
 	if !strings.Contains(out.String(), "typer cancel") {
 		t.Fatalf("receipt %s", out.String())
 	}
-	if jobs[0].SubmitKey != domain.DefaultSubmitKey {
+	if jobs[0].SubmitKey != "enter" {
 		t.Fatalf("submit key %q", jobs[0].SubmitKey)
 	}
 }
@@ -78,7 +78,7 @@ func TestScheduleSnapshotsSubmitKeyFromEnv(t *testing.T) {
 		Exe:    "/usr/bin/typer",
 		Getenv: func(key string) string {
 			if key == "TYPER_SUBMIT_KEY" {
-				return "enter"
+				return "ctrl+j"
 			}
 			return ""
 		},
@@ -90,7 +90,7 @@ func TestScheduleSnapshotsSubmitKeyFromEnv(t *testing.T) {
 	if err != nil || len(jobs) != 1 {
 		t.Fatalf("jobs %v %v", jobs, err)
 	}
-	if jobs[0].SubmitKey != "enter" {
+	if jobs[0].SubmitKey != "ctrl+j" {
 		t.Fatalf("submit key %q", jobs[0].SubmitKey)
 	}
 }

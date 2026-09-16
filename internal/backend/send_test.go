@@ -29,7 +29,7 @@ func TestSendKittyMatchesOnlySnapshotID(t *testing.T) {
 	if strings.HasSuffix(calls[0], "\n") || strings.Contains(calls[0], "continue\n") {
 		t.Fatalf("LF is not Enter: %q", calls[0])
 	}
-	if !strings.Contains(calls[1], "send-key") || !strings.Contains(calls[1], "ctrl+j") {
+	if !strings.Contains(calls[1], "send-key") || !strings.Contains(calls[1], "Enter") {
 		t.Fatalf("missing submit key: %v", calls)
 	}
 	if strings.Contains(calls[0], "id:1") && !strings.Contains(calls[0], "id:3") {
@@ -70,7 +70,7 @@ func TestSendKittyRequiresSocketAndID(t *testing.T) {
 	}
 }
 
-func TestSendKittyCanUseEnterWhenConfigured(t *testing.T) {
+func TestSendKittyCanUseCtrlJWhenConfigured(t *testing.T) {
 	kid := "3"
 	to := "unix:/run/user/1000/kitty"
 	var calls []string
@@ -78,10 +78,10 @@ func TestSendKittyCanUseEnterWhenConfigured(t *testing.T) {
 		calls = append(calls, strings.Join(args, " "))
 		return nil, nil
 	}
-	if err := SendKitty(run, domain.Target{KittyID: &kid, ListenOn: &to}, "continue", "enter"); err != nil {
+	if err := SendKitty(run, domain.Target{KittyID: &kid, ListenOn: &to}, "continue", "ctrl+j"); err != nil {
 		t.Fatal(err)
 	}
-	if len(calls) != 2 || !strings.Contains(calls[1], "send-key") || !strings.Contains(calls[1], "Enter") {
+	if len(calls) != 2 || !strings.Contains(calls[1], "send-key") || !strings.Contains(calls[1], "ctrl+j") {
 		t.Fatalf("%v", calls)
 	}
 }
@@ -122,12 +122,12 @@ func TestSendGnomeTargetsWindow(t *testing.T) {
 	if strings.Contains(joined, "type --clearmodifiers --window") {
 		t.Fatal("GNOME ignores SendEvent typing to its top-level window")
 	}
-	if !strings.Contains(joined, "type --clearmodifiers -- hello") || !strings.Contains(joined, "key --clearmodifiers ctrl+j") {
+	if !strings.Contains(joined, "type --clearmodifiers -- hello") || !strings.Contains(joined, "key --clearmodifiers Return") {
 		t.Fatalf("%v", calls)
 	}
 }
 
-func TestSendGnomeCanUseEnterWhenConfigured(t *testing.T) {
+func TestSendGnomeCanUseCtrlJWhenConfigured(t *testing.T) {
 	var calls []string
 	run := func(name string, args ...string) ([]byte, error) {
 		calls = append(calls, strings.Join(args, " "))
@@ -136,10 +136,10 @@ func TestSendGnomeCanUseEnterWhenConfigured(t *testing.T) {
 		}
 		return nil, nil
 	}
-	if err := SendGnome(run, false, domain.Target{WindowID: "0xabc"}, "hello", "enter"); err != nil {
+	if err := SendGnome(run, false, domain.Target{WindowID: "0xabc"}, "hello", "ctrl+j"); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(strings.Join(calls, " "), "key --clearmodifiers Return") {
+	if !strings.Contains(strings.Join(calls, " "), "key --clearmodifiers ctrl+j") {
 		t.Fatalf("%v", calls)
 	}
 }
@@ -165,7 +165,7 @@ func TestSendGnomeSendsReturnEvenIfFocusFlickersAfterType(t *testing.T) {
 	if !strings.Contains(joined, "type --clearmodifiers -- hi") {
 		t.Fatalf("missing type: %v", calls)
 	}
-	if !strings.Contains(joined, "key --clearmodifiers ctrl+j") {
+	if !strings.Contains(joined, "key --clearmodifiers Return") {
 		t.Fatalf("Enter skipped after type: %v", calls)
 	}
 }
